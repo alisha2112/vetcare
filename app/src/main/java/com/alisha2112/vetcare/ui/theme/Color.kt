@@ -2,10 +2,11 @@ package com.alisha2112.vetcare.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// Власна зелено-бірюзова палітра VetCare.
+val VetCareLightPrimary = Color(0xFF006C5F)
+val VetCareLightSecondary = Color(0xFF4A635B)
+val VetCareLightTertiary = Color(0xFF48627B)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+val VetCareDarkPrimary = Color(0xFF72D9C1)
+val VetCareDarkSecondary = Color(0xFFB2CCC2)
+val VetCareDarkTertiary = Color(0xFFB4C9E7)

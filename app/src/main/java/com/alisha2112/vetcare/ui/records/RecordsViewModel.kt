@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -27,6 +28,11 @@ class RecordsViewModel @Inject constructor(
     val selectedType: StateFlow<ObservationType?> =
         _selectedType.asStateFlow()
 
+    private val _searchQuery = MutableStateFlow("")
+
+    val searchQuery: StateFlow<String> =
+        _searchQuery.asStateFlow()
+
     val allRecords: StateFlow<List<VetObservation>> =
         repository.observeRecords().stateIn(
             viewModelScope,
@@ -35,12 +41,13 @@ class RecordsViewModel @Inject constructor(
         )
 
     val filteredRecords: StateFlow<List<VetObservation>> =
-        selectedType.flatMapLatest { type ->
-            if (type == null) {
-                repository.observeRecords()
-            } else {
-                repository.observeRecordsByType(type)
-            }
+        combine(
+            selectedType,
+            searchQuery
+        ) { type, query ->
+            type to query.trim()
+        }.flatMapLatest { (type, query) ->
+            repository.observeFiltered(type, query)
         }.stateIn(
             viewModelScope,
             SharingStarted.WhileSubscribed(5_000),
@@ -49,6 +56,14 @@ class RecordsViewModel @Inject constructor(
 
     fun selectType(type: ObservationType?) {
         _selectedType.value = type
+    }
+
+    fun updateSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
+    fun clearSearchQuery() {
+        _searchQuery.value = ""
     }
 
     fun addRecord(

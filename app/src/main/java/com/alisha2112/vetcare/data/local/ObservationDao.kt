@@ -22,15 +22,43 @@ interface ObservationDao {
 
     @Query(
         "SELECT * FROM observations " +
+                "WHERE note LIKE '%' || :query || '%' " +
+                "ORDER BY id DESC"
+    )
+    fun observeByNote(
+        query: String
+    ): Flow<List<ObservationEntity>>
+
+    @Query(
+        """
+        SELECT * FROM observations
+        WHERE (:type IS NULL OR type = :type)
+          AND note LIKE '%' || :query || '%'
+        ORDER BY id DESC
+        """
+    )
+    fun observeFiltered(
+        type: String?,
+        query: String
+    ): Flow<List<ObservationEntity>>
+
+    @Query(
+        "SELECT * FROM observations " +
                 "WHERE id = :id LIMIT 1"
     )
-    suspend fun findById(id: Long): ObservationEntity?
+    suspend fun findById(
+        id: Long
+    ): ObservationEntity?
 
     @Insert
-    suspend fun insert(record: ObservationEntity): Long
+    suspend fun insert(
+        record: ObservationEntity
+    ): Long
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertOrReplace(record: ObservationEntity)
+    suspend fun insertOrReplace(
+        record: ObservationEntity
+    )
 
     @Query("DELETE FROM observations WHERE id = :id")
     suspend fun deleteById(id: Long): Int

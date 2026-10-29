@@ -30,6 +30,19 @@ class RoomObservationRepository @Inject constructor(
             records.map { it.toModel() }
         }
 
+
+    override fun observeFiltered(
+        type: ObservationType?,
+        query: String
+    ): Flow<List<VetObservation>> =
+        dao.observeFiltered(
+            type = type?.name,
+            query = query
+        ).map { records ->
+            records.map { it.toModel() }
+        }
+
+
     override suspend fun addRecord(
         petName: String,
         type: ObservationType,

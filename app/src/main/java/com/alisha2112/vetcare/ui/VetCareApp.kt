@@ -77,6 +77,7 @@ fun VetCareApp() {
     val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
     val filteredRecords by viewModel.filteredRecords.collectAsStateWithLifecycle()
     val selectedType by viewModel.selectedType.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var role by rememberSaveable { mutableStateOf("Власник тварини") }
@@ -167,15 +168,22 @@ fun VetCareApp() {
                     onOpenRecords = { navController.navigate(RecordsRoute) }
                 )
             }
+
             composable<RecordsRoute> {
                 RecordsContent(
                     records = filteredRecords,
                     selectedType = selectedType,
+                    searchQuery = searchQuery,
                     onSelectType = viewModel::selectType,
-                    onOpenDetails = { navController.navigate(DetailsRoute(it)) },
+                    onSearchQueryChange = viewModel::updateSearchQuery,
+                    onClearSearch = viewModel::clearSearchQuery,
+                    onOpenDetails = {
+                        navController.navigate(DetailsRoute(it))
+                    },
                     onAdd = viewModel::addRecord
                 )
             }
+
             composable<StatisticsRoute> { StatisticsContent(allRecords) }
             composable<ProfileRoute> {
                 ProfileContent(
@@ -338,44 +346,146 @@ private fun ObservationCard(record: VetObservation, onClick: () -> Unit) {
 private fun RecordsContent(
     records: List<VetObservation>,
     selectedType: ObservationType?,
+    searchQuery: String,
     onSelectType: (ObservationType?) -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    onClearSearch: () -> Unit,
     onOpenDetails: (Long) -> Unit,
     onAdd: (String, ObservationType, Double, String) -> Unit
 ) {
-    var showAdd by rememberSaveable { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Журнал спостережень", style = MaterialTheme.typography.titleLarge)
-            Button(onClick = { showAdd = true }) { Text("+ Новий") }
-        }
-        androidx.compose.foundation.lazy.LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+    var showAdd by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 16.dp,
+                    vertical = 8.dp
+                ),
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            item { FilterChip(selected = selectedType == null,
-                onClick = { onSelectType(null) }, label = { Text("Усі") }) }
-            items(ObservationType.entries) { type ->
-                FilterChip(selected = selectedType == type,
-                    onClick = { onSelectType(type) }, label = { Text(type.title) })
+            Text(
+                text = "Журнал спостережень",
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Button(
+                onClick = { showAdd = true }
+            ) {
+                Text("+ Новий")
             }
         }
-        if (records.isEmpty()) {
-            Text("Записів за обраним типом поки немає", Modifier.padding(16.dp))
+
+        // Пошук за приміткою
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = onSearchQueryChange,
+            label = {
+                Text("Пошук за приміткою")
+            },
+            placeholder = {
+                Text("Наприклад: сон")
+            },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 16.dp,
+                    vertical = 4.dp
+                ),
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    TextButton(
+                        onClick = onClearSearch
+                    ) {
+                        Text("✕")
+                    }
+                }
+            }
+        )
+
+        // Фільтрація за типом спостереження
+        androidx.compose.foundation.lazy.LazyRow(
+            contentPadding = PaddingValues(
+                horizontal = 16.dp
+            ),
+            horizontalArrangement =
+                Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                FilterChip(
+                    selected = selectedType == null,
+                    onClick = {
+                        onSelectType(null)
+                    },
+                    label = {
+                        Text("Усі")
+                    }
+                )
+            }
+
+            items(ObservationType.entries) { type ->
+                FilterChip(
+                    selected = selectedType == type,
+                    onClick = {
+                        onSelectType(type)
+                    },
+                    label = {
+                        Text(type.title)
+                    }
+                )
+            }
         }
+
+        Text(
+            text = "Знайдено записів: ${records.size}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(
+                horizontal = 16.dp,
+                vertical = 4.dp
+            )
+        )
+
+        if (records.isEmpty()) {
+            Text(
+                text = "За вашим запитом записів не знайдено",
+                modifier = Modifier.padding(16.dp),
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+
         LazyColumn(
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement =
+                Arrangement.spacedBy(10.dp)
         ) {
-            items(records, key = { it.id }) { record ->
-                ObservationCard(record, onClick = { onOpenDetails(record.id) })
+            items(
+                items = records,
+                key = { it.id }
+            ) { record ->
+                ObservationCard(
+                    record = record,
+                    onClick = {
+                        onOpenDetails(record.id)
+                    }
+                )
             }
         }
     }
+
     if (showAdd) {
         AddObservationDialog(
-            onDismiss = { showAdd = false },
+            onDismiss = {
+                showAdd = false
+            },
             onSave = { name, type, value, note ->
                 onAdd(name, type, value, note)
                 showAdd = false
@@ -383,6 +493,7 @@ private fun RecordsContent(
         )
     }
 }
+
 
 @Composable
 private fun AddObservationDialog(

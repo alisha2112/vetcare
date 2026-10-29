@@ -2,7 +2,8 @@ package com.alisha2112.vetcare.ui.weather
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.alisha2112.vetcare.data.model.CurrentWeather
+import com.alisha2112.vetcare.data.cache.WeatherCacheRepository
+import com.alisha2112.vetcare.data.model.WeatherReport
 import com.alisha2112.vetcare.data.repository.WeatherRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.IOException
@@ -20,7 +21,10 @@ sealed interface WeatherUiState {
     data object Loading : WeatherUiState
 
     data class Success(
-        val weather: CurrentWeather
+        val report: WeatherReport,
+        val isStale: Boolean = false,
+        val isRefreshing: Boolean = false,
+        val warning: String? = null
     ) : WeatherUiState
 
     data class Error(
@@ -30,7 +34,8 @@ sealed interface WeatherUiState {
 
 @HiltViewModel
 class WeatherViewModel @Inject constructor(
-    private val repository: WeatherRepository
+    private val repository: WeatherRepository,
+    private val cacheRepository: WeatherCacheRepository
 ) : ViewModel() {
 
     private val _uiState =
@@ -41,55 +46,95 @@ class WeatherViewModel @Inject constructor(
     val uiState: StateFlow<WeatherUiState> =
         _uiState.asStateFlow()
 
+    private var requestInProgress = false
+
     init {
         refresh()
     }
 
     fun refresh() {
-        if (_uiState.value is WeatherUiState.Loading &&
-            requestInProgress
-        ) return
+        if (requestInProgress) return
+
+        requestInProgress = true
 
         viewModelScope.launch {
-            requestInProgress = true
-            _uiState.value = WeatherUiState.Loading
-
             try {
-                val weather = repository.getCurrentWeather()
+                val cached = try {
+                    cacheRepository.getCachedWeather()
+                } catch (exception: CancellationException) {
+                    throw exception
+                } catch (exception: Exception) {
+                    null
+                }
 
-                _uiState.value = WeatherUiState.Success(
-                    weather
-                )
+                if (cached != null) {
+                    _uiState.value = WeatherUiState.Success(
+                        report = cached,
+                        isStale = true,
+                        isRefreshing = true
+                    )
+                } else {
+                    _uiState.value = WeatherUiState.Loading
+                }
 
-            } catch (exception: CancellationException) {
-                throw exception
+                try {
+                    val freshReport =
+                        repository.getWeatherReport()
 
-            } catch (exception: HttpException) {
-                _uiState.value = WeatherUiState.Error(
-                    "Помилка сервера: HTTP ${exception.code()}"
-                )
+                    val cacheSaved = try {
+                        cacheRepository.saveWeather(freshReport)
+                        true
+                    } catch (exception: CancellationException) {
+                        throw exception
+                    } catch (exception: Exception) {
+                        false
+                    }
 
-            } catch (exception: IOException) {
-                _uiState.value = WeatherUiState.Error(
-                    "Не вдалося отримати погоду. " +
-                            "Перевірте підключення до інтернету."
-                )
+                    _uiState.value = WeatherUiState.Success(
+                        report = freshReport,
+                        isStale = false,
+                        warning = if (cacheSaved) {
+                            null
+                        } else {
+                            "Не вдалося зберегти офлайн-копію."
+                        }
+                    )
 
-            } catch (exception: SerializationException) {
-                _uiState.value = WeatherUiState.Error(
-                    "Не вдалося обробити відповідь сервера."
-                )
+                } catch (exception: CancellationException) {
+                    throw exception
 
-            } catch (exception: Exception) {
-                _uiState.value = WeatherUiState.Error(
-                    "Сталася помилка завантаження погоди."
-                )
+                } catch (exception: Exception) {
+                    val message = errorMessage(exception)
 
+                    _uiState.value =
+                        if (cached != null) {
+                            WeatherUiState.Success(
+                                report = cached,
+                                isStale = true,
+                                warning = "Не вдалося оновити: $message"
+                            )
+                        } else {
+                            WeatherUiState.Error(message)
+                        }
+                }
             } finally {
                 requestInProgress = false
             }
         }
     }
 
-    private var requestInProgress = false
+    private fun errorMessage(exception: Exception): String =
+        when (exception) {
+            is HttpException ->
+                "Помилка сервера: HTTP ${exception.code()}"
+
+            is IOException ->
+                "Перевірте підключення до інтернету."
+
+            is SerializationException ->
+                "Не вдалося обробити відповідь сервера."
+
+            else ->
+                "Сталася помилка завантаження погоди."
+        }
 }

@@ -1,3 +1,4 @@
+
 package com.alisha2112.vetcare.data.remote
 
 import kotlinx.serialization.SerialName
@@ -6,7 +7,10 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class WeatherResponseDto(
     @SerialName("current")
-    val current: CurrentWeatherDto
+    val current: CurrentWeatherDto,
+
+    @SerialName("daily")
+    val daily: DailyForecastDto
 )
 
 @Serializable
@@ -28,4 +32,16 @@ data class CurrentWeatherDto(
 
     @SerialName("weather_code")
     val weatherCode: Int
+)
+
+@Serializable
+data class DailyForecastDto(
+    @SerialName("time")
+    val dates: List<String>,
+
+    @SerialName("temperature_2m_max")
+    val maxTemperatures: List<Double?>,
+
+    @SerialName("temperature_2m_min")
+    val minTemperatures: List<Double?>
 )

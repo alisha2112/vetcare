@@ -71,6 +71,10 @@ import androidx.compose.material3.CircularProgressIndicator
 import com.alisha2112.vetcare.ui.weather.WeatherUiState
 import com.alisha2112.vetcare.ui.weather.WeatherViewModel
 import java.util.Locale
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Serializable data object LoginRoute
 @Serializable data object HomeRoute
@@ -438,12 +442,14 @@ private fun WeatherCard(
     state: WeatherUiState,
     onRefresh: () -> Unit
 ) {
+    val locale = Locale.forLanguageTag("uk")
+
     Card(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
                 text = "Погода в Києві",
@@ -457,6 +463,7 @@ private fun WeatherCard(
             )
 
             when (state) {
+
                 WeatherUiState.Loading -> {
                     Row(
                         horizontalArrangement =
@@ -464,14 +471,41 @@ private fun WeatherCard(
                     ) {
                         CircularProgressIndicator()
 
-                        Text(
-                            text = "Завантажуємо погоду..."
-                        )
+                        Text("Завантажуємо погоду...")
                     }
                 }
 
                 is WeatherUiState.Success -> {
-                    val weather = state.weather
+                    val report = state.report
+                    val weather = report.current
+
+                    if (state.isStale) {
+                        Text(
+                            text = "Дані застаріли",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+
+                        Text(
+                            text = "Показано останню збережену погоду.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    if (state.isRefreshing) {
+                        Text(
+                            text = "Перевіряємо оновлення погоди...",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    if (state.warning != null) {
+                        Text(
+                            text = state.warning,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
 
                     Text(
                         text = weather.description,
@@ -480,7 +514,7 @@ private fun WeatherCard(
 
                     Text(
                         text = String.format(
-                            Locale.forLanguageTag("uk"),
+                            locale,
                             "%.1f °C",
                             weather.temperatureCelsius
                         ),
@@ -491,21 +525,20 @@ private fun WeatherCard(
                     Text(
                         text = "Відчувається як: " +
                                 String.format(
-                                    Locale.forLanguageTag("uk"),
+                                    locale,
                                     "%.1f °C",
                                     weather.feelsLikeCelsius
                                 )
                     )
 
                     Text(
-                        text = "Вологість: " +
-                                "${weather.humidityPercent}%"
+                        text = "Вологість: ${weather.humidityPercent}%"
                     )
 
                     Text(
                         text = "Вітер: " +
                                 String.format(
-                                    Locale.forLanguageTag("uk"),
+                                    locale,
                                     "%.1f км/год",
                                     weather.windSpeedKmh
                                 )
@@ -515,6 +548,72 @@ private fun WeatherCard(
                         text = "Станом на: " +
                                 weather.observedAt.replace('T', ' ') +
                                 " (час Києва)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    Text(
+                        text = "Прогноз на 3 дні",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement =
+                            Arrangement.spacedBy(8.dp)
+                    ) {
+                        report.forecast.forEach { day ->
+                            val dateLabel = LocalDate
+                                .parse(day.date)
+                                .format(
+                                    DateTimeFormatter.ofPattern("dd.MM")
+                                )
+
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement =
+                                    Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = dateLabel,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+
+                                Text(
+                                    text = String.format(
+                                        locale,
+                                        "↑ %.1f°",
+                                        day.maxTemperatureCelsius
+                                    ),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+
+                                Text(
+                                    text = String.format(
+                                        locale,
+                                        "↓ %.1f°",
+                                        day.minTemperatureCelsius
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+
+                    val savedAt = Instant
+                        .ofEpochMilli(report.fetchedAtMillis)
+                        .atZone(ZoneId.of("Europe/Kyiv"))
+                        .format(
+                            DateTimeFormatter.ofPattern(
+                                "dd.MM.yyyy HH:mm"
+                            )
+                        )
+
+                    Text(
+                        text = "Останнє успішне оновлення: $savedAt",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -528,9 +627,16 @@ private fun WeatherCard(
                 }
             }
 
+            val canRefresh = when (state) {
+                WeatherUiState.Loading -> false
+                is WeatherUiState.Success ->
+                    !state.isRefreshing
+                is WeatherUiState.Error -> true
+            }
+
             OutlinedButton(
                 onClick = onRefresh,
-                enabled = state !is WeatherUiState.Loading
+                enabled = canRefresh
             ) {
                 Text(
                     if (state is WeatherUiState.Error) {

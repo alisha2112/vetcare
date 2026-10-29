@@ -1,5 +1,7 @@
 package com.alisha2112.vetcare.data.model
 
+import kotlinx.serialization.Serializable
+@Serializable
 data class CurrentWeather(
     val temperatureCelsius: Double,
     val feelsLikeCelsius: Double,

@@ -6,7 +6,7 @@ import retrofit2.http.Query
 interface WeatherApi {
 
     @GET("v1/forecast")
-    suspend fun getCurrentWeather(
+    suspend fun getWeatherForecast(
         @Query("latitude")
         latitude: Double,
 
@@ -19,7 +19,14 @@ interface WeatherApi {
                     "apparent_temperature,wind_speed_10m," +
                     "weather_code",
 
+        @Query("daily")
+        dailyVariables: String =
+            "temperature_2m_max,temperature_2m_min",
+
+        @Query("forecast_days")
+        forecastDays: Int = 3,
+
         @Query("timezone")
-        timezone: String = "auto"
+        timezone: String = "Europe/Kyiv"
     ): WeatherResponseDto
 }

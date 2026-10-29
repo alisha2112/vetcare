@@ -63,6 +63,10 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import com.alisha2112.vetcare.data.settings.ThemeMode
 import com.alisha2112.vetcare.data.settings.UserSettings
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
 
 @Serializable data object LoginRoute
 @Serializable data object HomeRoute
@@ -81,6 +85,8 @@ fun VetCareApp(
 ) {
     val navController = rememberNavController()
     val viewModel: RecordsViewModel = hiltViewModel()
+    val isExporting by viewModel.isExporting.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
     val filteredRecords by viewModel.filteredRecords.collectAsStateWithLifecycle()
     val selectedType by viewModel.selectedType.collectAsStateWithLifecycle()
@@ -192,7 +198,60 @@ fun VetCareApp(
                     onOpenDetails = {
                         navController.navigate(DetailsRoute(it))
                     },
-                    onAdd = viewModel::addRecord
+                    onAdd = viewModel::addRecord,
+
+                    isExporting = isExporting,
+                    onExport = {
+                        viewModel.exportCsv(
+                            onReady = { uri ->
+                                val sendIntent = Intent(
+                                    Intent.ACTION_SEND
+                                ).apply {
+                                    type = "text/csv"
+
+                                    putExtra(
+                                        Intent.EXTRA_STREAM,
+                                        uri
+                                    )
+
+                                    clipData = ClipData.newRawUri(
+                                        "VetCare CSV",
+                                        uri
+                                    )
+
+                                    addFlags(
+                                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                    )
+                                }
+
+                                try {
+                                    val chooser = Intent.createChooser(
+                                        sendIntent,
+                                        "Поділитися журналом VetCare"
+                                    )
+
+                                    chooser.addFlags(
+                                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                    )
+
+                                    context.startActivity(chooser)
+
+                                } catch (exception: ActivityNotFoundException) {
+                                    scope.launch {
+                                        snackbar.showSnackbar(
+                                            "Немає застосунку для передавання CSV"
+                                        )
+                                    }
+                                }
+                            },
+                            onError = { message ->
+                                scope.launch {
+                                    snackbar.showSnackbar(message)
+                                }
+                            }
+                        )
+                    }
+
                 )
             }
 
@@ -379,7 +438,9 @@ private fun RecordsContent(
     onSearchQueryChange: (String) -> Unit,
     onClearSearch: () -> Unit,
     onOpenDetails: (Long) -> Unit,
-    onAdd: (String, ObservationType, Double, String) -> Unit
+    onAdd: (String, ObservationType, Double, String) -> Unit,
+    isExporting: Boolean,
+    onExport: () -> Unit
 ) {
     var showAdd by rememberSaveable {
         mutableStateOf(false)
@@ -389,24 +450,42 @@ private fun RecordsContent(
         modifier = Modifier.fillMaxSize()
     ) {
 
-        Row(
+
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(
                     horizontal = 16.dp,
                     vertical = 8.dp
                 ),
-            horizontalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
                 text = "Журнал спостережень",
                 style = MaterialTheme.typography.titleLarge
             )
 
-            Button(
-                onClick = { showAdd = true }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("+ Новий")
+                OutlinedButton(
+                    onClick = onExport,
+                    enabled = !isExporting
+                ) {
+                    Text(
+                        if (isExporting) {
+                            "Експорт..."
+                        } else {
+                            "Експорт CSV"
+                        }
+                    )
+                }
+
+                Button(
+                    onClick = { showAdd = true }
+                ) {
+                    Text("+ Новий")
+                }
             }
         }
 

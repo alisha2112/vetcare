@@ -61,6 +61,8 @@ import com.alisha2112.vetcare.data.model.summary
 import com.alisha2112.vetcare.ui.records.RecordsViewModel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import com.alisha2112.vetcare.data.settings.ThemeMode
+import com.alisha2112.vetcare.data.settings.UserSettings
 
 @Serializable data object LoginRoute
 @Serializable data object HomeRoute
@@ -69,9 +71,14 @@ import kotlinx.serialization.Serializable
 @Serializable data object ProfileRoute
 @Serializable data class DetailsRoute(val recordId: Long)
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VetCareApp() {
+fun VetCareApp(
+    userSettings: UserSettings,
+    onSaveUserName: (String) -> Unit,
+    onThemeModeChange: (ThemeMode) -> Unit
+) {
     val navController = rememberNavController()
     val viewModel: RecordsViewModel = hiltViewModel()
     val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
@@ -162,12 +169,17 @@ fun VetCareApp() {
                     }
                 }
             }
+
             composable<HomeRoute> {
                 HomeContent(
                     records = allRecords,
-                    onOpenRecords = { navController.navigate(RecordsRoute) }
+                    userName = userSettings.userName,
+                    onOpenRecords = {
+                        navController.navigate(RecordsRoute)
+                    }
                 )
             }
+
 
             composable<RecordsRoute> {
                 RecordsContent(
@@ -185,20 +197,27 @@ fun VetCareApp() {
             }
 
             composable<StatisticsRoute> { StatisticsContent(allRecords) }
+
             composable<ProfileRoute> {
                 ProfileContent(
                     role = role,
+                    settings = userSettings,
+                    onSaveUserName = onSaveUserName,
+                    onThemeModeChange = onThemeModeChange,
                     onLogout = {
                         showAbout = false
                         role = "Власник тварини"
-                        // Remove Home and every nested destination so Back cannot reopen the profile.
+
                         navController.navigate(LoginRoute) {
-                            popUpTo<HomeRoute> { inclusive = true }
+                            popUpTo<HomeRoute> {
+                                inclusive = true
+                            }
                             launchSingleTop = true
                         }
                     }
                 )
             }
+
             composable<DetailsRoute> { entry ->
                 val id = entry.toRoute<DetailsRoute>().recordId
                 DetailsContent(
@@ -294,7 +313,11 @@ private fun LoginContent(onLogin: (String) -> Unit) {
 }
 
 @Composable
-private fun HomeContent(records: List<VetObservation>, onOpenRecords: () -> Unit) {
+private fun HomeContent(
+    records: List<VetObservation>,
+    userName: String,
+    onOpenRecords: () -> Unit
+) {
     var registrations by rememberSaveable { mutableIntStateOf(0) }
     val recent = records.take(3)
     Column(
@@ -302,6 +325,11 @@ private fun HomeContent(records: List<VetObservation>, onOpenRecords: () -> Unit
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text("Огляд клініки", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            text = "Вітаємо, $userName!",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
         Text("Приклади спостережень за тваринами (не медичні записи)")
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
@@ -614,16 +642,117 @@ private fun StatisticsContent(records: List<VetObservation>) {
     }
 }
 
+
 @Composable
-private fun ProfileContent(role: String, onLogout: () -> Unit) {
+private fun ProfileContent(
+    role: String,
+    settings: UserSettings,
+    onSaveUserName: (String) -> Unit,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    onLogout: () -> Unit
+) {
+    var nameDraft by rememberSaveable(settings.userName) {
+        mutableStateOf(
+            if (settings.userName == "Користувач") {
+                ""
+            } else {
+                settings.userName
+            }
+        )
+    }
+
+    val normalizedName = nameDraft.trim()
+
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Профіль", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            text = "Профіль",
+            style = MaterialTheme.typography.headlineMedium
+        )
+
         Text("Обрана демонстраційна роль: $role")
-        Text("Реєстрація користувачів і серверна авторизація будуть додані на подальших етапах.")
+
+        Text(
+            text = "Налаштування зберігаються локально на пристрої.",
+            style = MaterialTheme.typography.bodySmall
+        )
+
         Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "Особисті налаштування",
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        OutlinedTextField(
+            value = nameDraft,
+            onValueChange = { nameDraft = it },
+            label = { Text("Ваше ім'я") },
+            placeholder = { Text("Введіть ваше ім'я") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Button(
+            onClick = {
+                onSaveUserName(normalizedName)
+            },
+            enabled = normalizedName.isNotEmpty() &&
+                    normalizedName != settings.userName,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Зберегти ім'я")
+        }
+
+        Text(
+            text = "Збережене ім'я: ${settings.userName}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "Тема застосунку",
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        androidx.compose.foundation.lazy.LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(ThemeMode.entries) { mode ->
+                FilterChip(
+                    selected = settings.themeMode == mode,
+                    onClick = {
+                        onThemeModeChange(mode)
+                    },
+                    label = {
+                        Text(mode.title)
+                    }
+                )
+            }
+        }
+
+        Text(
+            text = "Режим «Як у системі» автоматично " +
+                    "використовує тему, вибрану в Android.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        Text(
+            text = "Реєстрація користувачів і серверна " +
+                    "авторизація будуть додані на подальших етапах.",
+            style = MaterialTheme.typography.bodySmall
+        )
+
         OutlinedButton(
             onClick = onLogout,
             modifier = Modifier.fillMaxWidth()

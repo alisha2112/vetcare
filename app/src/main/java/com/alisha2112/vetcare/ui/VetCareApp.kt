@@ -67,6 +67,10 @@ import android.content.ActivityNotFoundException
 import android.content.ClipData
 import android.content.Intent
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.CircularProgressIndicator
+import com.alisha2112.vetcare.ui.weather.WeatherUiState
+import com.alisha2112.vetcare.ui.weather.WeatherViewModel
+import java.util.Locale
 
 @Serializable data object LoginRoute
 @Serializable data object HomeRoute
@@ -177,15 +181,21 @@ fun VetCareApp(
             }
 
             composable<HomeRoute> {
+                val weatherViewModel: WeatherViewModel = hiltViewModel()
+
+                val weatherState by weatherViewModel.uiState
+                    .collectAsStateWithLifecycle()
+
                 HomeContent(
                     records = allRecords,
                     userName = userSettings.userName,
+                    weatherState = weatherState,
+                    onRefreshWeather = weatherViewModel::refresh,
                     onOpenRecords = {
                         navController.navigate(RecordsRoute)
                     }
                 )
             }
-
 
             composable<RecordsRoute> {
                 RecordsContent(
@@ -375,6 +385,8 @@ private fun LoginContent(onLogin: (String) -> Unit) {
 private fun HomeContent(
     records: List<VetObservation>,
     userName: String,
+    weatherState: WeatherUiState,
+    onRefreshWeather: () -> Unit,
     onOpenRecords: () -> Unit
 ) {
     var registrations by rememberSaveable { mutableIntStateOf(0) }
@@ -398,6 +410,10 @@ private fun HomeContent(
                 Button(onClick = onOpenRecords) { Text("Відкрити журнал") }
             }
         }
+        WeatherCard(
+            state = weatherState,
+            onRefresh = onRefreshWeather
+        )
         Text("Останні спостереження", style = MaterialTheme.typography.titleMedium)
         recent.forEach { ObservationCard(it, onClick = onOpenRecords) }
         Card(Modifier.fillMaxWidth()) {
@@ -413,6 +429,123 @@ private fun HomeContent(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun WeatherCard(
+    state: WeatherUiState,
+    onRefresh: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "Погода в Києві",
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Text(
+                text = "Демонстраційне місто",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            when (state) {
+                WeatherUiState.Loading -> {
+                    Row(
+                        horizontalArrangement =
+                            Arrangement.spacedBy(12.dp)
+                    ) {
+                        CircularProgressIndicator()
+
+                        Text(
+                            text = "Завантажуємо погоду..."
+                        )
+                    }
+                }
+
+                is WeatherUiState.Success -> {
+                    val weather = state.weather
+
+                    Text(
+                        text = weather.description,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Text(
+                        text = String.format(
+                            Locale.forLanguageTag("uk"),
+                            "%.1f °C",
+                            weather.temperatureCelsius
+                        ),
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Text(
+                        text = "Відчувається як: " +
+                                String.format(
+                                    Locale.forLanguageTag("uk"),
+                                    "%.1f °C",
+                                    weather.feelsLikeCelsius
+                                )
+                    )
+
+                    Text(
+                        text = "Вологість: " +
+                                "${weather.humidityPercent}%"
+                    )
+
+                    Text(
+                        text = "Вітер: " +
+                                String.format(
+                                    Locale.forLanguageTag("uk"),
+                                    "%.1f км/год",
+                                    weather.windSpeedKmh
+                                )
+                    )
+
+                    Text(
+                        text = "Станом на: " +
+                                weather.observedAt.replace('T', ' ') +
+                                " (час Києва)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                is WeatherUiState.Error -> {
+                    Text(
+                        text = state.message,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+
+            OutlinedButton(
+                onClick = onRefresh,
+                enabled = state !is WeatherUiState.Loading
+            ) {
+                Text(
+                    if (state is WeatherUiState.Error) {
+                        "Повторити"
+                    } else {
+                        "Оновити"
+                    }
+                )
+            }
+
+            Text(
+                text = "Джерело: Open-Meteo",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

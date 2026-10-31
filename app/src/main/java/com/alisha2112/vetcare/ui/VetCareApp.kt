@@ -61,6 +61,20 @@ import com.alisha2112.vetcare.data.model.summary
 import com.alisha2112.vetcare.ui.records.RecordsViewModel
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import com.alisha2112.vetcare.data.settings.ThemeMode
+import com.alisha2112.vetcare.data.settings.UserSettings
+import android.content.ActivityNotFoundException
+import android.content.ClipData
+import android.content.Intent
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.CircularProgressIndicator
+import com.alisha2112.vetcare.ui.weather.WeatherUiState
+import com.alisha2112.vetcare.ui.weather.WeatherViewModel
+import java.util.Locale
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Serializable data object LoginRoute
 @Serializable data object HomeRoute
@@ -69,14 +83,22 @@ import kotlinx.serialization.Serializable
 @Serializable data object ProfileRoute
 @Serializable data class DetailsRoute(val recordId: Long)
 
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun VetCareApp() {
+fun VetCareApp(
+    userSettings: UserSettings,
+    onSaveUserName: (String) -> Unit,
+    onThemeModeChange: (ThemeMode) -> Unit
+) {
     val navController = rememberNavController()
     val viewModel: RecordsViewModel = hiltViewModel()
+    val isExporting by viewModel.isExporting.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
     val filteredRecords by viewModel.filteredRecords.collectAsStateWithLifecycle()
     val selectedType by viewModel.selectedType.collectAsStateWithLifecycle()
+    val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val snackbar = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     var role by rememberSaveable { mutableStateOf("Власник тварини") }
@@ -161,36 +183,114 @@ fun VetCareApp() {
                     }
                 }
             }
+
             composable<HomeRoute> {
+                val weatherViewModel: WeatherViewModel = hiltViewModel()
+
+                val weatherState by weatherViewModel.uiState
+                    .collectAsStateWithLifecycle()
+
                 HomeContent(
                     records = allRecords,
-                    onOpenRecords = { navController.navigate(RecordsRoute) }
+                    userName = userSettings.userName,
+                    weatherState = weatherState,
+                    onRefreshWeather = weatherViewModel::refresh,
+                    onOpenRecords = {
+                        navController.navigate(RecordsRoute)
+                    }
                 )
             }
+
             composable<RecordsRoute> {
                 RecordsContent(
                     records = filteredRecords,
                     selectedType = selectedType,
+                    searchQuery = searchQuery,
                     onSelectType = viewModel::selectType,
-                    onOpenDetails = { navController.navigate(DetailsRoute(it)) },
-                    onAdd = viewModel::addRecord
+                    onSearchQueryChange = viewModel::updateSearchQuery,
+                    onClearSearch = viewModel::clearSearchQuery,
+                    onOpenDetails = {
+                        navController.navigate(DetailsRoute(it))
+                    },
+                    onAdd = viewModel::addRecord,
+
+                    isExporting = isExporting,
+                    onExport = {
+                        viewModel.exportCsv(
+                            onReady = { uri ->
+                                val sendIntent = Intent(
+                                    Intent.ACTION_SEND
+                                ).apply {
+                                    type = "text/csv"
+
+                                    putExtra(
+                                        Intent.EXTRA_STREAM,
+                                        uri
+                                    )
+
+                                    clipData = ClipData.newRawUri(
+                                        "VetCare CSV",
+                                        uri
+                                    )
+
+                                    addFlags(
+                                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                    )
+                                }
+
+                                try {
+                                    val chooser = Intent.createChooser(
+                                        sendIntent,
+                                        "Поділитися журналом VetCare"
+                                    )
+
+                                    chooser.addFlags(
+                                        Intent.FLAG_GRANT_READ_URI_PERMISSION
+                                    )
+
+                                    context.startActivity(chooser)
+
+                                } catch (exception: ActivityNotFoundException) {
+                                    scope.launch {
+                                        snackbar.showSnackbar(
+                                            "Немає застосунку для передавання CSV"
+                                        )
+                                    }
+                                }
+                            },
+                            onError = { message ->
+                                scope.launch {
+                                    snackbar.showSnackbar(message)
+                                }
+                            }
+                        )
+                    }
+
                 )
             }
+
             composable<StatisticsRoute> { StatisticsContent(allRecords) }
+
             composable<ProfileRoute> {
                 ProfileContent(
                     role = role,
+                    settings = userSettings,
+                    onSaveUserName = onSaveUserName,
+                    onThemeModeChange = onThemeModeChange,
                     onLogout = {
                         showAbout = false
                         role = "Власник тварини"
-                        // Remove Home and every nested destination so Back cannot reopen the profile.
+
                         navController.navigate(LoginRoute) {
-                            popUpTo<HomeRoute> { inclusive = true }
+                            popUpTo<HomeRoute> {
+                                inclusive = true
+                            }
                             launchSingleTop = true
                         }
                     }
                 )
             }
+
             composable<DetailsRoute> { entry ->
                 val id = entry.toRoute<DetailsRoute>().recordId
                 DetailsContent(
@@ -229,7 +329,10 @@ fun VetCareApp() {
             onDismissRequest = { showAbout = false },
             title = { Text("Про VetCare") },
             text = {
-                Text("Навчальний прототип АІС «Ветеринарна клініка». Дані є демонстраційними та зберігаються тільки в пам’яті застосунку. Вхід не є реальною авторизацією.")
+                Text("Навчальний прототип АІС «Ветеринарна клініка». " +
+                        "Спостереження зберігаються локально на пристрої " +
+                        "у базі даних Room. Вхід є демонстраційним " +
+                        "і не передбачає реальної авторизації.")
             },
             confirmButton = { TextButton(onClick = { showAbout = false }) { Text("Зрозуміло") } }
         )
@@ -283,7 +386,13 @@ private fun LoginContent(onLogin: (String) -> Unit) {
 }
 
 @Composable
-private fun HomeContent(records: List<VetObservation>, onOpenRecords: () -> Unit) {
+private fun HomeContent(
+    records: List<VetObservation>,
+    userName: String,
+    weatherState: WeatherUiState,
+    onRefreshWeather: () -> Unit,
+    onOpenRecords: () -> Unit
+) {
     var registrations by rememberSaveable { mutableIntStateOf(0) }
     val recent = records.take(3)
     Column(
@@ -291,6 +400,11 @@ private fun HomeContent(records: List<VetObservation>, onOpenRecords: () -> Unit
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text("Огляд клініки", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            text = "Вітаємо, $userName!",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
         Text("Приклади спостережень за тваринами (не медичні записи)")
         Card(modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.padding(16.dp)) {
@@ -300,6 +414,10 @@ private fun HomeContent(records: List<VetObservation>, onOpenRecords: () -> Unit
                 Button(onClick = onOpenRecords) { Text("Відкрити журнал") }
             }
         }
+        WeatherCard(
+            state = weatherState,
+            onRefresh = onRefreshWeather
+        )
         Text("Останні спостереження", style = MaterialTheme.typography.titleMedium)
         recent.forEach { ObservationCard(it, onClick = onOpenRecords) }
         Card(Modifier.fillMaxWidth()) {
@@ -320,6 +438,225 @@ private fun HomeContent(records: List<VetObservation>, onOpenRecords: () -> Unit
 }
 
 @Composable
+private fun WeatherCard(
+    state: WeatherUiState,
+    onRefresh: () -> Unit
+) {
+    val locale = Locale.forLanguageTag("uk")
+
+    Card(
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Погода в Києві",
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Text(
+                text = "Демонстраційне місто",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            when (state) {
+
+                WeatherUiState.Loading -> {
+                    Row(
+                        horizontalArrangement =
+                            Arrangement.spacedBy(12.dp)
+                    ) {
+                        CircularProgressIndicator()
+
+                        Text("Завантажуємо погоду...")
+                    }
+                }
+
+                is WeatherUiState.Success -> {
+                    val report = state.report
+                    val weather = report.current
+
+                    if (state.isStale) {
+                        Text(
+                            text = "Дані застаріли",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+
+                        Text(
+                            text = "Показано останню збережену погоду.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    if (state.isRefreshing) {
+                        Text(
+                            text = "Перевіряємо оновлення погоди...",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+
+                    if (state.warning != null) {
+                        Text(
+                            text = state.warning,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
+                    Text(
+                        text = weather.description,
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Text(
+                        text = String.format(
+                            locale,
+                            "%.1f °C",
+                            weather.temperatureCelsius
+                        ),
+                        style = MaterialTheme.typography.headlineLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Text(
+                        text = "Відчувається як: " +
+                                String.format(
+                                    locale,
+                                    "%.1f °C",
+                                    weather.feelsLikeCelsius
+                                )
+                    )
+
+                    Text(
+                        text = "Вологість: ${weather.humidityPercent}%"
+                    )
+
+                    Text(
+                        text = "Вітер: " +
+                                String.format(
+                                    locale,
+                                    "%.1f км/год",
+                                    weather.windSpeedKmh
+                                )
+                    )
+
+                    Text(
+                        text = "Станом на: " +
+                                weather.observedAt.replace('T', ' ') +
+                                " (час Києва)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(Modifier.height(4.dp))
+
+                    Text(
+                        text = "Прогноз на 3 дні",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement =
+                            Arrangement.spacedBy(8.dp)
+                    ) {
+                        report.forecast.forEach { day ->
+                            val dateLabel = LocalDate
+                                .parse(day.date)
+                                .format(
+                                    DateTimeFormatter.ofPattern("dd.MM")
+                                )
+
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement =
+                                    Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = dateLabel,
+                                    style = MaterialTheme.typography.labelMedium
+                                )
+
+                                Text(
+                                    text = String.format(
+                                        locale,
+                                        "↑ %.1f°",
+                                        day.maxTemperatureCelsius
+                                    ),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+
+                                Text(
+                                    text = String.format(
+                                        locale,
+                                        "↓ %.1f°",
+                                        day.minTemperatureCelsius
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                        }
+                    }
+
+                    val savedAt = Instant
+                        .ofEpochMilli(report.fetchedAtMillis)
+                        .atZone(ZoneId.of("Europe/Kyiv"))
+                        .format(
+                            DateTimeFormatter.ofPattern(
+                                "dd.MM.yyyy HH:mm"
+                            )
+                        )
+
+                    Text(
+                        text = "Останнє успішне оновлення: $savedAt",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                is WeatherUiState.Error -> {
+                    Text(
+                        text = state.message,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+
+            val canRefresh = when (state) {
+                WeatherUiState.Loading -> false
+                is WeatherUiState.Success ->
+                    !state.isRefreshing
+                is WeatherUiState.Error -> true
+            }
+
+            OutlinedButton(
+                onClick = onRefresh,
+                enabled = canRefresh
+            ) {
+                Text(
+                    if (state is WeatherUiState.Error) {
+                        "Повторити"
+                    } else {
+                        "Оновити"
+                    }
+                )
+            }
+
+            Text(
+                text = "Джерело: Open-Meteo",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
 private fun ObservationCard(record: VetObservation, onClick: () -> Unit) {
     Card(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick)) {
         Column(Modifier.padding(14.dp)) {
@@ -335,44 +672,166 @@ private fun ObservationCard(record: VetObservation, onClick: () -> Unit) {
 private fun RecordsContent(
     records: List<VetObservation>,
     selectedType: ObservationType?,
+    searchQuery: String,
     onSelectType: (ObservationType?) -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    onClearSearch: () -> Unit,
     onOpenDetails: (Long) -> Unit,
-    onAdd: (String, ObservationType, Double, String) -> Unit
+    onAdd: (String, ObservationType, Double, String) -> Unit,
+    isExporting: Boolean,
+    onExport: () -> Unit
 ) {
-    var showAdd by rememberSaveable { mutableStateOf(false) }
-    Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween) {
-            Text("Журнал спостережень", style = MaterialTheme.typography.titleLarge)
-            Button(onClick = { showAdd = true }) { Text("+ Новий") }
-        }
-        androidx.compose.foundation.lazy.LazyRow(
-            contentPadding = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+    var showAdd by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 16.dp,
+                    vertical = 8.dp
+                ),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            item { FilterChip(selected = selectedType == null,
-                onClick = { onSelectType(null) }, label = { Text("Усі") }) }
-            items(ObservationType.entries) { type ->
-                FilterChip(selected = selectedType == type,
-                    onClick = { onSelectType(type) }, label = { Text(type.title) })
+            Text(
+                text = "Журнал спостережень",
+                style = MaterialTheme.typography.titleLarge
+            )
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = onExport,
+                    enabled = !isExporting
+                ) {
+                    Text(
+                        if (isExporting) {
+                            "Експорт..."
+                        } else {
+                            "Експорт CSV"
+                        }
+                    )
+                }
+
+                Button(
+                    onClick = { showAdd = true }
+                ) {
+                    Text("+ Новий")
+                }
             }
         }
-        if (records.isEmpty()) {
-            Text("Записів за обраним типом поки немає", Modifier.padding(16.dp))
+
+        // Пошук за приміткою
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = onSearchQueryChange,
+            label = {
+                Text("Пошук за приміткою")
+            },
+            placeholder = {
+                Text("Наприклад: сон")
+            },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 16.dp,
+                    vertical = 4.dp
+                ),
+            trailingIcon = {
+                if (searchQuery.isNotEmpty()) {
+                    TextButton(
+                        onClick = onClearSearch
+                    ) {
+                        Text("✕")
+                    }
+                }
+            }
+        )
+
+        // Фільтрація за типом спостереження
+        androidx.compose.foundation.lazy.LazyRow(
+            contentPadding = PaddingValues(
+                horizontal = 16.dp
+            ),
+            horizontalArrangement =
+                Arrangement.spacedBy(8.dp)
+        ) {
+            item {
+                FilterChip(
+                    selected = selectedType == null,
+                    onClick = {
+                        onSelectType(null)
+                    },
+                    label = {
+                        Text("Усі")
+                    }
+                )
+            }
+
+            items(ObservationType.entries) { type ->
+                FilterChip(
+                    selected = selectedType == type,
+                    onClick = {
+                        onSelectType(type)
+                    },
+                    label = {
+                        Text(type.title)
+                    }
+                )
+            }
         }
+
+        Text(
+            text = "Знайдено записів: ${records.size}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(
+                horizontal = 16.dp,
+                vertical = 4.dp
+            )
+        )
+
+        if (records.isEmpty()) {
+            Text(
+                text = "За вашим запитом записів не знайдено",
+                modifier = Modifier.padding(16.dp),
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+
         LazyColumn(
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement =
+                Arrangement.spacedBy(10.dp)
         ) {
-            items(records, key = { it.id }) { record ->
-                ObservationCard(record, onClick = { onOpenDetails(record.id) })
+            items(
+                items = records,
+                key = { it.id }
+            ) { record ->
+                ObservationCard(
+                    record = record,
+                    onClick = {
+                        onOpenDetails(record.id)
+                    }
+                )
             }
         }
     }
+
     if (showAdd) {
         AddObservationDialog(
-            onDismiss = { showAdd = false },
+            onDismiss = {
+                showAdd = false
+            },
             onSave = { name, type, value, note ->
                 onAdd(name, type, value, note)
                 showAdd = false
@@ -380,6 +839,7 @@ private fun RecordsContent(
         )
     }
 }
+
 
 @Composable
 private fun AddObservationDialog(
@@ -500,16 +960,117 @@ private fun StatisticsContent(records: List<VetObservation>) {
     }
 }
 
+
 @Composable
-private fun ProfileContent(role: String, onLogout: () -> Unit) {
+private fun ProfileContent(
+    role: String,
+    settings: UserSettings,
+    onSaveUserName: (String) -> Unit,
+    onThemeModeChange: (ThemeMode) -> Unit,
+    onLogout: () -> Unit
+) {
+    var nameDraft by rememberSaveable(settings.userName) {
+        mutableStateOf(
+            if (settings.userName == "Користувач") {
+                ""
+            } else {
+                settings.userName
+            }
+        )
+    }
+
+    val normalizedName = nameDraft.trim()
+
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Профіль", style = MaterialTheme.typography.headlineMedium)
+        Text(
+            text = "Профіль",
+            style = MaterialTheme.typography.headlineMedium
+        )
+
         Text("Обрана демонстраційна роль: $role")
-        Text("Реєстрація користувачів і серверна авторизація будуть додані на подальших етапах.")
+
+        Text(
+            text = "Налаштування зберігаються локально на пристрої.",
+            style = MaterialTheme.typography.bodySmall
+        )
+
         Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "Особисті налаштування",
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        OutlinedTextField(
+            value = nameDraft,
+            onValueChange = { nameDraft = it },
+            label = { Text("Ваше ім'я") },
+            placeholder = { Text("Введіть ваше ім'я") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Button(
+            onClick = {
+                onSaveUserName(normalizedName)
+            },
+            enabled = normalizedName.isNotEmpty() &&
+                    normalizedName != settings.userName,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text("Зберегти ім'я")
+        }
+
+        Text(
+            text = "Збережене ім'я: ${settings.userName}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(8.dp))
+
+        Text(
+            text = "Тема застосунку",
+            style = MaterialTheme.typography.titleMedium
+        )
+
+        androidx.compose.foundation.lazy.LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(ThemeMode.entries) { mode ->
+                FilterChip(
+                    selected = settings.themeMode == mode,
+                    onClick = {
+                        onThemeModeChange(mode)
+                    },
+                    label = {
+                        Text(mode.title)
+                    }
+                )
+            }
+        }
+
+        Text(
+            text = "Режим «Як у системі» автоматично " +
+                    "використовує тему, вибрану в Android.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        Text(
+            text = "Реєстрація користувачів і серверна " +
+                    "авторизація будуть додані на подальших етапах.",
+            style = MaterialTheme.typography.bodySmall
+        )
+
         OutlinedButton(
             onClick = onLogout,
             modifier = Modifier.fillMaxWidth()

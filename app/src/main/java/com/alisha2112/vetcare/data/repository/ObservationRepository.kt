@@ -12,6 +12,11 @@ interface ObservationRepository {
         type: ObservationType
     ): Flow<List<VetObservation>>
 
+    fun observeFiltered(
+        type: ObservationType?,
+        query: String
+    ): Flow<List<VetObservation>>
+
     suspend fun addRecord(
         petName: String,
         type: ObservationType,

@@ -1,5 +1,4 @@
-﻿
-plugins {
+﻿plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
@@ -82,4 +81,31 @@ dependencies {
     // Debug tools
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     debugImplementation(libs.androidx.compose.ui.tooling)
+
+    // Room — локальна база даних
+    implementation(libs.androidx.room.runtime)
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+
+    // DataStore — налаштування та кеш
+    implementation(libs.androidx.datastore.preferences)
+
+    // Retrofit, OkHttp та JSON
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.kotlinx.converter)
+    implementation(libs.okhttp.logging)
+    implementation(libs.kotlinx.serialization.json)
+
+    // Тестування
+    testImplementation(libs.kotlinx.coroutines.test)
+    androidTestImplementation(libs.androidx.room.testing)
+
+
+    testImplementation(libs.okhttp.mockwebserver)
+    androidTestImplementation(libs.kotlinx.coroutines.test)
 }
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+}
+

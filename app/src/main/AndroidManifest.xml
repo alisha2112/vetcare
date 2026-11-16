@@ -2,9 +2,42 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
-
+    <!-- Доступ до мережі -->
     <uses-permission
             android:name="android.permission.INTERNET" />
+
+    <!-- Геолокація та карти -->
+    <uses-permission
+            android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission
+            android:name="android.permission.ACCESS_COARSE_LOCATION" />
+
+    <!-- Bluetooth для Android 11 і старіших -->
+    <uses-permission
+            android:name="android.permission.BLUETOOTH"
+            android:maxSdkVersion="30" />
+    <uses-permission
+            android:name="android.permission.BLUETOOTH_ADMIN"
+            android:maxSdkVersion="30" />
+
+    <!-- Bluetooth LE для Android 12+ -->
+    <uses-permission
+            android:name="android.permission.BLUETOOTH_SCAN"
+            android:usesPermissionFlags="neverForLocation" />
+    <uses-permission
+            android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- Крокомір для Android 10+ -->
+    <uses-permission
+            android:name="android.permission.ACTIVITY_RECOGNITION" />
+
+    <!-- Необов'язкові апаратні можливості -->
+    <uses-feature
+            android:name="android.hardware.bluetooth_le"
+            android:required="false" />
+    <uses-feature
+            android:name="android.hardware.sensor.stepcounter"
+            android:required="false" />
     <application
         android:name=".VetCareApplication"
         android:allowBackup="true"

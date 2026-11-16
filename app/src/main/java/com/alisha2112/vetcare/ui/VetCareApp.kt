@@ -66,6 +66,7 @@ import com.alisha2112.vetcare.ui.permissions.LocationPermissionScreen
 import com.alisha2112.vetcare.ui.records.RecordsViewModel
 import com.alisha2112.vetcare.ui.weather.WeatherUiState
 import com.alisha2112.vetcare.ui.weather.WeatherViewModel
+import com.alisha2112.vetcare.ui.ble.BleScreen
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import java.time.Instant
@@ -74,6 +75,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
+@Serializable data object BleRoute
 @Serializable data object LoginRoute
 @Serializable data object HomeRoute
 @Serializable data object LocationPermissionRoute
@@ -177,6 +179,12 @@ fun VetCareApp(
             startDestination = LoginRoute,
             modifier = Modifier.padding(padding)
         ) {
+            composable<BleRoute> {
+                BleScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
             composable<LoginRoute> {
                 LoginContent { selectedRole ->
                     role = selectedRole
@@ -202,6 +210,9 @@ fun VetCareApp(
                     },
                     onOpenLocationPermissions = {
                         navController.navigate(LocationPermissionRoute)
+                    },
+                    onOpenBle = {
+                        navController.navigate(BleRoute)
                     }
                 )
             }
@@ -485,7 +496,8 @@ private fun HomeContent(
     weatherState: WeatherUiState,
     onRefreshWeather: () -> Unit,
     onOpenRecords: () -> Unit,
-    onOpenLocationPermissions: () -> Unit
+    onOpenLocationPermissions: () -> Unit,
+    onOpenBle: () -> Unit
 ) {
     var registrations by rememberSaveable {
         mutableIntStateOf(0)
@@ -558,6 +570,10 @@ private fun HomeContent(
                     onClick = onOpenLocationPermissions
                 ) {
                     Text("Перевірити дозвіл")
+                }
+
+                Button(onClick = onOpenBle) {
+                    Text("Bluetooth LE")
                 }
             }
         }

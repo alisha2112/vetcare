@@ -36,7 +36,8 @@ data class GattConnectionState(
     val supportsHeartRate: Boolean = false,
     val batteryPercent: Int? = null,
     val heartRate: Int? = null,
-    val message: String? = null
+    val message: String? = null,
+    val measurementId: Long = 0L
 )
 
 @SuppressLint("MissingPermission")
@@ -55,27 +56,13 @@ class BleGattClient @Inject constructor(
         private val BATTERY_SERVICE = uuid("180F")
         private val BATTERY_LEVEL = uuid("2A19")
         private val CCCD = uuid("2902")
-
-        fun parseHeartRate(bytes: ByteArray): Int? {
-            if (bytes.size < 2) return null
-
-            val flags = bytes[0].toInt() and 0xFF
-            val is16Bit = flags and 0x01 != 0
-
-            return if (is16Bit) {
-                if (bytes.size < 3) null
-                else (bytes[1].toInt() and 0xFF) or
-                        ((bytes[2].toInt() and 0xFF) shl 8)
-            } else {
-                bytes[1].toInt() and 0xFF
-            }
-        }
     }
 
     private val _state = MutableStateFlow(GattConnectionState())
     val state = _state.asStateFlow()
 
     private val generation = AtomicLong(0L)
+    private val measurementSequence = AtomicLong(0L)
 
     @Volatile
     private var activeGatt: BluetoothGatt? = null
@@ -377,26 +364,30 @@ class BleGattClient @Inject constructor(
         if (!isCurrent(token)) return
         if (characteristic.uuid != BATTERY_LEVEL) return
 
-        if (status == BluetoothGatt.GATT_SUCCESS &&
-            value.isNotEmpty()
-        ) {
-            val percent = value[0].toInt() and 0xFF
+        if (status == BluetoothGatt.GATT_SUCCESS) {
+            val battery = BleDataParser.parseBatteryLevel(value)
 
-            if (percent in 0..100) {
+            if (battery != null) {
                 _state.update {
-                    it.copy(batteryPercent = percent)
+                    it.copy(batteryPercent = battery)
                 }
             } else {
                 _state.update {
-                    it.copy(message = "Некоректне значення батареї")
+                    it.copy(
+                        message = "Некоректне значення Battery Level"
+                    )
                 }
             }
         } else {
             _state.update {
-                it.copy(message = "Помилка читання Battery Level")
+                it.copy(
+                    message = "Помилка читання Battery Level"
+                )
             }
         }
 
+        // Після завершення читання батареї
+        // можна налаштовувати Heart Rate notifications.
         subscribeToHeartRate(gatt, token)
     }
 
@@ -408,11 +399,16 @@ class BleGattClient @Inject constructor(
         if (!isCurrent(token)) return
         if (characteristic.uuid != HEART_MEASUREMENT) return
 
-        val pulse = parseHeartRate(value)
+        val pulse = BleDataParser.parseHeartRate(value)
 
         if (pulse != null) {
+            val measurementId = measurementSequence.incrementAndGet()
+
             _state.update {
-                it.copy(heartRate = pulse)
+                it.copy(
+                    heartRate = pulse,
+                    measurementId = measurementId
+                )
             }
         }
     }

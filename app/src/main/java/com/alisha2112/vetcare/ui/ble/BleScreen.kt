@@ -41,6 +41,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.alisha2112.vetcare.ble.GattPhase
 import com.alisha2112.vetcare.ui.components.PermissionCard
 import com.alisha2112.vetcare.ui.components.rememberPermissionsState
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.runtime.saveable.rememberSaveable
 
 @SuppressLint("MissingPermission")
 private fun isBluetoothEnabled(
@@ -72,6 +74,12 @@ fun BleScreen(
 
     val scanState by viewModel.uiState.collectAsStateWithLifecycle()
     val connection by viewModel.connection.collectAsStateWithLifecycle()
+
+    val saveState by viewModel.saveState.collectAsStateWithLifecycle()
+
+    var petName by rememberSaveable {
+        mutableStateOf("")
+    }
 
     // Дозволи залежать від версії Android.
     val permissions = remember {
@@ -282,6 +290,65 @@ fun BleScreen(
                                 Text(
                                     text = "Пульс: $heartText"
                                 )
+
+                                if (connection.supportsHeartRate) {
+                                    Text(
+                                        text = "Зберегти вимірювання",
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+
+                                    OutlinedTextField(
+                                        value = petName,
+                                        onValueChange = {
+                                            petName = it
+                                            viewModel.clearSaveMessage()
+                                        },
+                                        label = { Text("Кличка тварини") },
+                                        singleLine = true,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    Text(
+                                        text = "Зберігайте показник як спостереження " +
+                                                "тварини лише якщо датчик справді " +
+                                                "використовувався для її вимірювання.",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+
+                                    val canSave =
+                                        (connection.heartRate ?: 0) > 0 &&
+                                                connection.measurementId > 0L &&
+                                                saveState.savedMeasurementId != connection.measurementId &&
+                                                petName.isNotBlank() &&
+                                                !saveState.isSaving
+
+                                    Button(
+                                        onClick = {
+                                            viewModel.savePulse(petName)
+                                        },
+                                        enabled = canSave,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            if (saveState.isSaving) {
+                                                "Збереження..."
+                                            } else {
+                                                "Зберегти в журнал"
+                                            }
+                                        )
+                                    }
+
+                                    saveState.message?.let { message ->
+                                        Text(
+                                            text = message,
+                                            color = if (saveState.isError) {
+                                                MaterialTheme.colorScheme.error
+                                            } else {
+                                                MaterialTheme.colorScheme.primary
+                                            }
+                                        )
+                                    }
+                                }
                             }
 
                             OutlinedButton(

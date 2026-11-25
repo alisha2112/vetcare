@@ -56,6 +56,10 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import androidx.compose.runtime.LaunchedEffect
+import com.alisha2112.vetcare.data.photo.ObservationPhotoStorage
+import com.alisha2112.vetcare.ui.records.ObservationPhotoPicker
+import com.alisha2112.vetcare.ui.records.AddObservationUiState
 import com.alisha2112.vetcare.data.model.ObservationType
 import com.alisha2112.vetcare.data.model.VetObservation
 import com.alisha2112.vetcare.data.model.countByType
@@ -70,6 +74,7 @@ import com.alisha2112.vetcare.ui.weather.WeatherViewModel
 import com.alisha2112.vetcare.ui.ble.BleScreen
 import com.alisha2112.vetcare.ui.records.ObservationLocationPicker
 import com.alisha2112.vetcare.ui.map.ObservationsMapScreen
+import com.alisha2112.vetcare.ui.records.ObservationPhotoPreview
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import java.time.Instant
@@ -99,6 +104,7 @@ fun VetCareApp(
     val navController = rememberNavController()
     val viewModel: RecordsViewModel = hiltViewModel()
     val isExporting by viewModel.isExporting.collectAsStateWithLifecycle()
+    val addState by viewModel.addState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val allRecords by viewModel.allRecords.collectAsStateWithLifecycle()
     val filteredRecords by viewModel.filteredRecords.collectAsStateWithLifecycle()
@@ -256,6 +262,8 @@ fun VetCareApp(
                         navController.navigate(DetailsRoute(it))
                     },
                     onAdd = viewModel::addRecord,
+                    addState = addState,
+                    onClearAddResult = viewModel::clearAddResult,
                     isExporting = isExporting,
                     onOpenMap = {
                         navController.navigate(ObservationsMapRoute)
@@ -909,13 +917,23 @@ private fun RecordsContent(
         Double,
         String,
         Double?,
-        Double?
+        Double?,
+        String?
     ) -> Unit,
+    addState: AddObservationUiState,
+    onClearAddResult: () -> Unit,
     isExporting: Boolean,
     onExport: () -> Unit
 ) {
     var showAdd by rememberSaveable {
         mutableStateOf(false)
+    }
+
+    LaunchedEffect(addState.saved) {
+        if (addState.saved) {
+            showAdd = false
+            onClearAddResult()
+        }
     }
 
     Column(
@@ -1072,29 +1090,19 @@ private fun RecordsContent(
 
     if (showAdd) {
         AddObservationDialog(
+            addState = addState,
             onDismiss = {
                 showAdd = false
+                onClearAddResult()
             },
-            onSave = {
-                    name, type, value, note, latitude, longitude ->
-
-                onAdd(
-                    name,
-                    type,
-                    value,
-                    note,
-                    latitude,
-                    longitude
-                )
-
-                showAdd = false
-            }
+            onSave = onAdd
         )
     }
 }
 
 @Composable
 private fun AddObservationDialog(
+    addState: AddObservationUiState,
     onDismiss: () -> Unit,
     onSave: (
         String,
@@ -1102,15 +1110,26 @@ private fun AddObservationDialog(
         Double,
         String,
         Double?,
-        Double?
+        Double?,
+        String?
     ) -> Unit
 ) {
+    val context = LocalContext.current
+
+    val photoStorage = remember(context) {
+        ObservationPhotoStorage(
+            context.applicationContext
+        )
+    }
+
     var petName by rememberSaveable {
         mutableStateOf("")
     }
 
     var selectedTypeName by rememberSaveable {
-        mutableStateOf(ObservationType.TEMPERATURE.name)
+        mutableStateOf(
+            ObservationType.TEMPERATURE.name
+        )
     }
 
     var value by rememberSaveable {
@@ -1121,11 +1140,12 @@ private fun AddObservationDialog(
         mutableStateOf("")
     }
 
-    var latitude by remember {
+    // GPS-координати спостереження.
+    var latitude by rememberSaveable {
         mutableStateOf<Double?>(null)
     }
 
-    var longitude by remember {
+    var longitude by rememberSaveable {
         mutableStateOf<Double?>(null)
     }
 
@@ -1133,96 +1153,235 @@ private fun AddObservationDialog(
         mutableStateOf(false)
     }
 
-    val type = ObservationType.valueOf(selectedTypeName)
-    val numeric = value.replace(',', '.').toDoubleOrNull()
+    // Фотографія поточної чернетки.
+    var photoPath by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
 
-    val valid = petName.isNotBlank() &&
-            numeric != null &&
-            numeric.isFinite() &&
-            numeric > 0
+    var photoBusy by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var photoError by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    val type = ObservationType.valueOf(
+        selectedTypeName
+    )
+
+    val numeric = value
+        .replace(',', '.')
+        .toDoubleOrNull()
+
+    val valid =
+        petName.isNotBlank() &&
+                numeric != null &&
+                numeric.isFinite() &&
+                numeric > 0
+
+    val saving =
+        addState.isSaving || addState.saved
+
+    val busy =
+        locationLoading ||
+                photoBusy ||
+                saving
+
+    // Заміна або прибирання фото чернетки.
+    fun changePhoto(newPath: String?) {
+        val previousPath = photoPath
+
+        photoPath = newPath
+        photoError = null
+
+        if (
+            previousPath != null &&
+            previousPath != newPath
+        ) {
+            photoStorage.deletePhoto(previousPath)
+        }
+    }
+
+    // Скасування створення спостереження.
+    fun discardDraft() {
+        if (busy) return
+
+        photoStorage.deletePhoto(photoPath)
+        photoPath = null
+
+        onDismiss()
+    }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = ::discardDraft,
+
         title = {
             Text("Нове спостереження")
         },
+
         text = {
-            Column(
-                modifier = Modifier.verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedTextField(
-                    value = petName,
-                    onValueChange = { petName = it },
-                    label = { Text("Кличка тварини") },
-                    singleLine = true
-                )
+            if (saving) {
+                Column(
+                    verticalArrangement =
+                        Arrangement.spacedBy(12.dp)
+                ) {
+                    CircularProgressIndicator()
 
-                Text("Тип спостереження")
-
-                ObservationType.entries.forEach { option ->
-                    FilterChip(
-                        selected = type == option,
-                        onClick = {
-                            selectedTypeName = option.name
+                    Text("Збереження спостереження...")
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(
+                            rememberScrollState()
+                        ),
+                    verticalArrangement =
+                        Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedTextField(
+                        value = petName,
+                        onValueChange = {
+                            petName = it
                         },
                         label = {
-                            Text(option.title)
+                            Text("Кличка тварини")
+                        },
+                        singleLine = true
+                    )
+
+                    Text("Тип спостереження")
+
+                    ObservationType.entries.forEach {
+                            option ->
+
+                        FilterChip(
+                            selected = type == option,
+                            onClick = {
+                                selectedTypeName =
+                                    option.name
+                            },
+                            label = {
+                                Text(option.title)
+                            }
+                        )
+                    }
+
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = {
+                            value = it
+                        },
+                        label = {
+                            Text(
+                                "Значення (${type.unit})"
+                            )
+                        },
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = note,
+                        onValueChange = {
+                            note = it
+                        },
+                        label = {
+                            Text("Примітка")
                         }
                     )
+
+                    // Наявна геолокація.
+                    ObservationLocationPicker(
+                        latitude = latitude,
+                        longitude = longitude,
+                        onLocationChanged = { lat, lon ->
+                            latitude = lat
+                            longitude = lon
+                        },
+                        onLoadingChanged = { loading ->
+                            locationLoading = loading
+                        }
+                    )
+
+                    // Новий компонент фотографій.
+                    ObservationPhotoPicker(
+                        photoPath = photoPath,
+                        onPhotoChanged = ::changePhoto,
+                        onBusyChanged = { loading ->
+                            photoBusy = loading
+                        }
+                    )
+
+                    photoError?.let { message ->
+                        Text(
+                            text = message,
+                            color = MaterialTheme
+                                .colorScheme.error,
+                            style = MaterialTheme
+                                .typography.bodySmall
+                        )
+                    }
+
+                    addState.error?.let { message ->
+                        Text(
+                            text = message,
+                            color = MaterialTheme
+                                .colorScheme.error,
+                            style = MaterialTheme
+                                .typography.bodySmall
+                        )
+                    }
                 }
-
-                OutlinedTextField(
-                    value = value,
-                    onValueChange = { value = it },
-                    label = {
-                        Text("Значення (${type.unit})")
-                    },
-                    singleLine = true
-                )
-
-                OutlinedTextField(
-                    value = note,
-                    onValueChange = { note = it },
-                    label = {
-                        Text("Примітка")
-                    }
-                )
-
-                ObservationLocationPicker(
-                    latitude = latitude,
-                    longitude = longitude,
-                    onLocationChanged = { lat, lon ->
-                        latitude = lat
-                        longitude = lon
-                    },
-                    onLoadingChanged = { loading ->
-                        locationLoading = loading
-                    }
-                )
             }
         },
+
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (numeric != null) {
-                        onSave(
-                            petName,
-                            type,
-                            numeric,
-                            note,
-                            latitude,
-                            longitude
-                        )
+                    if (valid && !busy && numeric != null) {
+                        if (
+                            photoPath != null &&
+                            !photoStorage.isPhotoReady(
+                                photoPath
+                            )
+                        ) {
+                            photoError =
+                                "Фотографія недоступна. " +
+                                        "Оберіть її повторно " +
+                                        "або приберіть."
+
+                        } else {
+                            photoError = null
+
+                            onSave(
+                                petName,
+                                type,
+                                numeric,
+                                note,
+                                latitude,
+                                longitude,
+                                photoPath
+                            )
+                        }
                     }
                 },
-                enabled = valid && !locationLoading
+                enabled = valid && !busy
             ) {
-                Text("Зберегти")
+                Text(
+                    if (saving) {
+                        "Збереження..."
+                    } else {
+                        "Зберегти"
+                    }
+                )
             }
         },
+
         dismissButton = {
-            TextButton(onClick = onDismiss) {
+            TextButton(
+                onClick = ::discardDraft,
+                enabled = !busy
+            ) {
                 Text("Скасувати")
             }
         }
@@ -1243,6 +1402,7 @@ private fun DetailsContent(
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
@@ -1292,6 +1452,25 @@ private fun DetailsContent(
             } else {
                 Text(
                     text = "Місцезнаходження не прикріплено",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            Text(
+                text = "Фотографія",
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            val photoPath = record.photoPath
+
+            if (photoPath != null) {
+                ObservationPhotoPreview(
+                    photoPath = photoPath
+                )
+            } else {
+                Text(
+                    text = "Фотографію не прикріплено",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )

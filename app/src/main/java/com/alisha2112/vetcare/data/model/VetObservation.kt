@@ -8,6 +8,7 @@ enum class ObservationType(val title: String, val unit: String) {
     FEEDING("Годування", "г")
 }
 
+
 data class VetObservation(
     val id: Long,
     val petName: String,
@@ -16,7 +17,8 @@ data class VetObservation(
     val note: String,
     val recordedAt: String,
     val latitude: Double? = null,
-    val longitude: Double? = null
+    val longitude: Double? = null,
+    val photoPath: String? = null
 )
 
 /**

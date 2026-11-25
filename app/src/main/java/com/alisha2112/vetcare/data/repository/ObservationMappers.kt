@@ -13,7 +13,8 @@ fun ObservationEntity.toModel(): VetObservation =
         note = note,
         recordedAt = recordedAt,
         latitude = latitude,
-        longitude = longitude
+        longitude = longitude,
+        photoPath = photoPath
     )
 
 fun VetObservation.toEntity(): ObservationEntity =
@@ -25,5 +26,6 @@ fun VetObservation.toEntity(): ObservationEntity =
         note = note,
         recordedAt = recordedAt,
         latitude = latitude,
-        longitude = longitude
+        longitude = longitude,
+        photoPath = photoPath
     )

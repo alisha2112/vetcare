@@ -30,7 +30,8 @@ object DatabaseModule {
             "vetcare.db"
         )
             .addMigrations(
-                DatabaseMigrations.MIGRATION_1_2
+                DatabaseMigrations.MIGRATION_1_2,
+                DatabaseMigrations.MIGRATION_2_3
             )
             .addCallback(SeedObservationsCallback())
             .build()

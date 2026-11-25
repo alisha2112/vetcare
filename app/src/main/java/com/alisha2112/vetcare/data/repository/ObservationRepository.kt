@@ -23,7 +23,8 @@ interface ObservationRepository {
         value: Double,
         note: String,
         latitude: Double? = null,
-        longitude: Double? = null
+        longitude: Double? = null,
+        photoPath: String? = null
     )
 
     suspend fun deleteRecord(id: Long): VetObservation?

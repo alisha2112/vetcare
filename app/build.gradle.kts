@@ -43,6 +43,9 @@ android {
 }
 
 dependencies {
+    // Coil — відображення фотографій
+    implementation(libs.coil.compose)
+
     // MapLibre Native — інтерактивні карти
     implementation(libs.maplibre.android)
 

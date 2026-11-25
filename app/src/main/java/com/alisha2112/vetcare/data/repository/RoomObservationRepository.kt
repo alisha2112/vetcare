@@ -48,7 +48,8 @@ class RoomObservationRepository @Inject constructor(
         value: Double,
         note: String,
         latitude: Double?,
-        longitude: Double?
+        longitude: Double?,
+        photoPath: String?
     ) {
         require(
             (latitude == null && longitude == null) ||
@@ -75,7 +76,8 @@ class RoomObservationRepository @Inject constructor(
                 note = note.trim(),
                 recordedAt = date,
                 latitude = latitude,
-                longitude = longitude
+                longitude = longitude,
+                photoPath = photoPath
             )
         )
     }

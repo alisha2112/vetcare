@@ -2,7 +2,11 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
 
     <files-path
-            name="csv_exports"
-            path="exports/" />
+        name="csv_exports"
+        path="exports/" />
+
+    <files-path
+        name="observation_photos"
+        path="observation_photos/" />
 
 </paths>

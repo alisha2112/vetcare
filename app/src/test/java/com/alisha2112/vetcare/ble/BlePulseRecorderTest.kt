@@ -46,7 +46,8 @@ class BlePulseRecorderTest {
             value: Double,
             note: String,
             latitude: Double?,
-            longitude: Double?
+            longitude: Double?,
+            photoPath: String?
         ) {
             writeGate?.await()
 

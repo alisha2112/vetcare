@@ -43,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -67,6 +68,8 @@ import com.alisha2112.vetcare.ui.records.RecordsViewModel
 import com.alisha2112.vetcare.ui.weather.WeatherUiState
 import com.alisha2112.vetcare.ui.weather.WeatherViewModel
 import com.alisha2112.vetcare.ui.ble.BleScreen
+import com.alisha2112.vetcare.ui.records.ObservationLocationPicker
+import com.alisha2112.vetcare.ui.map.ObservationsMapScreen
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import java.time.Instant
@@ -82,6 +85,8 @@ import java.util.Locale
 @Serializable data object RecordsRoute
 @Serializable data object StatisticsRoute
 @Serializable data object ProfileRoute
+@Serializable
+data object ObservationsMapRoute
 @Serializable data class DetailsRoute(val recordId: Long)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -225,6 +230,20 @@ fun VetCareApp(
                 )
             }
 
+            composable<ObservationsMapRoute> {
+                ObservationsMapScreen(
+                    records = allRecords,
+                    onOpenDetails = { recordId ->
+                        navController.navigate(
+                            DetailsRoute(recordId)
+                        )
+                    },
+                    onBack = {
+                        navController.popBackStack()
+                    }
+                )
+            }
+
             composable<RecordsRoute> {
                 RecordsContent(
                     records = filteredRecords,
@@ -238,6 +257,9 @@ fun VetCareApp(
                     },
                     onAdd = viewModel::addRecord,
                     isExporting = isExporting,
+                    onOpenMap = {
+                        navController.navigate(ObservationsMapRoute)
+                    },
                     onExport = {
                         viewModel.exportCsv(
                             onReady = { uri ->
@@ -880,7 +902,15 @@ private fun RecordsContent(
     onSearchQueryChange: (String) -> Unit,
     onClearSearch: () -> Unit,
     onOpenDetails: (Long) -> Unit,
-    onAdd: (String, ObservationType, Double, String) -> Unit,
+    onOpenMap: () -> Unit,
+    onAdd: (
+        String,
+        ObservationType,
+        Double,
+        String,
+        Double?,
+        Double?
+    ) -> Unit,
     isExporting: Boolean,
     onExport: () -> Unit
 ) {
@@ -906,10 +936,15 @@ private fun RecordsContent(
             )
 
             Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 OutlinedButton(
                     onClick = onExport,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp),
                     enabled = !isExporting
                 ) {
                     Text(
@@ -922,10 +957,21 @@ private fun RecordsContent(
                 }
 
                 Button(
-                    onClick = { showAdd = true }
+                    onClick = { showAdd = true },
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(48.dp)
                 ) {
                     Text("+ Новий")
                 }
+            }
+            OutlinedButton(
+                onClick = onOpenMap,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+            ) {
+                Text("Карта спостережень")
             }
         }
 
@@ -1029,8 +1075,18 @@ private fun RecordsContent(
             onDismiss = {
                 showAdd = false
             },
-            onSave = { name, type, value, note ->
-                onAdd(name, type, value, note)
+            onSave = {
+                    name, type, value, note, latitude, longitude ->
+
+                onAdd(
+                    name,
+                    type,
+                    value,
+                    note,
+                    latitude,
+                    longitude
+                )
+
                 showAdd = false
             }
         )
@@ -1040,7 +1096,14 @@ private fun RecordsContent(
 @Composable
 private fun AddObservationDialog(
     onDismiss: () -> Unit,
-    onSave: (String, ObservationType, Double, String) -> Unit
+    onSave: (
+        String,
+        ObservationType,
+        Double,
+        String,
+        Double?,
+        Double?
+    ) -> Unit
 ) {
     var petName by rememberSaveable {
         mutableStateOf("")
@@ -1056,6 +1119,18 @@ private fun AddObservationDialog(
 
     var note by rememberSaveable {
         mutableStateOf("")
+    }
+
+    var latitude by remember {
+        mutableStateOf<Double?>(null)
+    }
+
+    var longitude by remember {
+        mutableStateOf<Double?>(null)
+    }
+
+    var locationLoading by remember {
+        mutableStateOf(false)
     }
 
     val type = ObservationType.valueOf(selectedTypeName)
@@ -1113,6 +1188,18 @@ private fun AddObservationDialog(
                         Text("Примітка")
                     }
                 )
+
+                ObservationLocationPicker(
+                    latitude = latitude,
+                    longitude = longitude,
+                    onLocationChanged = { lat, lon ->
+                        latitude = lat
+                        longitude = lon
+                    },
+                    onLoadingChanged = { loading ->
+                        locationLoading = loading
+                    }
+                )
             }
         },
         confirmButton = {
@@ -1123,11 +1210,13 @@ private fun AddObservationDialog(
                             petName,
                             type,
                             numeric,
-                            note
+                            note,
+                            latitude,
+                            longitude
                         )
                     }
                 },
-                enabled = valid
+                enabled = valid && !locationLoading
             ) {
                 Text("Зберегти")
             }
@@ -1158,13 +1247,14 @@ private fun DetailsContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         TextButton(onClick = onBack) {
-            Text("← До журналу")
+            Text("← Назад")
         }
 
         Text(
             text = "Деталі запису",
             style = MaterialTheme.typography.headlineMedium
         )
+
 
         if (record == null) {
             Text("Запис не знайдено або видалено")
@@ -1174,6 +1264,38 @@ private fun DetailsContent(
             Text("Значення: ${record.value} ${record.type.unit}")
             Text("Дата: ${record.recordedAt}")
             Text("Примітка: ${record.note.ifBlank { "Не вказано" }}")
+
+            Text(
+                text = "Місцезнаходження",
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            val latitude = record.latitude
+            val longitude = record.longitude
+
+            if (latitude != null && longitude != null) {
+                Text(
+                    text = String.format(
+                        Locale.US,
+                        "Широта: %.6f",
+                        latitude
+                    )
+                )
+
+                Text(
+                    text = String.format(
+                        Locale.US,
+                        "Довгота: %.6f",
+                        longitude
+                    )
+                )
+            } else {
+                Text(
+                    text = "Місцезнаходження не прикріплено",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             if (record.type == ObservationType.SLEEP) {
                 Text(

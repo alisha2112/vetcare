@@ -43,6 +43,8 @@ android {
 }
 
 dependencies {
+    // MapLibre Native — інтерактивні карти
+    implementation(libs.maplibre.android)
 
     // Jetpack Compose та Material 3
     implementation(platform(libs.androidx.compose.bom))
@@ -108,4 +110,3 @@ dependencies {
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
-

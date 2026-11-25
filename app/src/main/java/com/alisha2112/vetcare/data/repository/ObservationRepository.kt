@@ -21,7 +21,9 @@ interface ObservationRepository {
         petName: String,
         type: ObservationType,
         value: Double,
-        note: String
+        note: String,
+        latitude: Double? = null,
+        longitude: Double? = null
     )
 
     suspend fun deleteRecord(id: Long): VetObservation?

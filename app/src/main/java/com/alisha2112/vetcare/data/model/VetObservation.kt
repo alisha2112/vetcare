@@ -14,7 +14,9 @@ data class VetObservation(
     val type: ObservationType,
     val value: Double,
     val note: String,
-    val recordedAt: String
+    val recordedAt: String,
+    val latitude: Double? = null,
+    val longitude: Double? = null
 )
 
 /**

@@ -44,7 +44,9 @@ class BlePulseRecorderTest {
             petName: String,
             type: ObservationType,
             value: Double,
-            note: String
+            note: String,
+            latitude: Double?,
+            longitude: Double?
         ) {
             writeGate?.await()
 

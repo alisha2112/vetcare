@@ -79,7 +79,9 @@ class RecordsViewModel @Inject constructor(
         petName: String,
         type: ObservationType,
         value: Double,
-        note: String
+        note: String,
+        latitude: Double? = null,
+        longitude: Double? = null
     ) {
         if (
             petName.isBlank() ||
@@ -87,12 +89,25 @@ class RecordsViewModel @Inject constructor(
             value <= 0
         ) return
 
+        val validCoordinates =
+            (latitude == null && longitude == null) ||
+                    (
+                            latitude != null &&
+                                    longitude != null &&
+                                    latitude in -90.0..90.0 &&
+                                    longitude in -180.0..180.0
+                            )
+
+        if (!validCoordinates) return
+
         viewModelScope.launch {
             repository.addRecord(
-                petName,
-                type,
-                value,
-                note
+                petName = petName,
+                type = type,
+                value = value,
+                note = note,
+                latitude = latitude,
+                longitude = longitude
             )
         }
     }

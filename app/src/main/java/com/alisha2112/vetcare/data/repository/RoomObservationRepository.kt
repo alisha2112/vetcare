@@ -42,13 +42,26 @@ class RoomObservationRepository @Inject constructor(
             records.map { it.toModel() }
         }
 
-
     override suspend fun addRecord(
         petName: String,
         type: ObservationType,
         value: Double,
-        note: String
+        note: String,
+        latitude: Double?,
+        longitude: Double?
     ) {
+        require(
+            (latitude == null && longitude == null) ||
+                    (
+                            latitude != null &&
+                                    longitude != null &&
+                                    latitude in -90.0..90.0 &&
+                                    longitude in -180.0..180.0
+                            )
+        ) {
+            "Некоректні GPS-координати"
+        }
+
         val date = SimpleDateFormat(
             "dd.MM.yyyy",
             Locale("uk")
@@ -60,7 +73,9 @@ class RoomObservationRepository @Inject constructor(
                 type = type.name,
                 value = value,
                 note = note.trim(),
-                recordedAt = date
+                recordedAt = date,
+                latitude = latitude,
+                longitude = longitude
             )
         )
     }

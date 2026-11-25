@@ -5,6 +5,7 @@ import com.alisha2112.vetcare.data.model.DaySummary
 import com.alisha2112.vetcare.data.model.ObservationType
 import com.alisha2112.vetcare.data.model.VetObservation
 import com.alisha2112.vetcare.data.model.countByType
+import com.alisha2112.vetcare.data.model.formattedValue
 import com.alisha2112.vetcare.data.model.sleepQuality
 import com.alisha2112.vetcare.data.model.summary
 import org.junit.Assert.assertEquals
@@ -102,5 +103,35 @@ class VetObservationTest {
 
         assertEquals("", original.note)
         assertEquals("Відредагована примітка", modified.note)
+    }
+
+    @Test
+    fun stepsObservationIsCountedAndFormattedAsInteger() {
+        val steps = VetObservation(
+            5, "Рекс", ObservationType.STEPS,
+            1234.0, "", "22.10.2026"
+        )
+        val all = records + steps
+
+        assertEquals("1234", steps.formattedValue())
+        assertEquals("80.0", records[1].formattedValue())
+        assertEquals(1234L, all.summary().totalSteps)
+        assertEquals(1, all.countByType()[ObservationType.STEPS])
+        assertEquals(0L, records.summary().totalSteps)
+    }
+
+    @Test
+    fun stepsTypeIsNotOfferedForManualEntry() {
+        assertEquals(false, ObservationType.STEPS.manualEntry)
+        assertEquals("кроків", ObservationType.STEPS.unit)
+        assertEquals(
+            listOf(
+                ObservationType.TEMPERATURE,
+                ObservationType.PULSE,
+                ObservationType.SLEEP,
+                ObservationType.FEEDING
+            ),
+            ObservationType.entries.filter { it.manualEntry }
+        )
     }
 }

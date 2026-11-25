@@ -26,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.alisha2112.vetcare.data.model.VetObservation
+import com.alisha2112.vetcare.data.model.formattedValue
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -258,7 +259,7 @@ fun ObservationsMapScreen(
 
                         Text(
                             text = "${record.type.title}: " +
-                                "${record.value} ${record.type.unit}"
+                                "${record.formattedValue()} ${record.type.unit}"
                         )
 
                         Text("Дата: ${record.recordedAt}")
@@ -333,7 +334,7 @@ fun ObservationsMapScreen(
                                 Text(
                                     text =
                                         "${record.type.title}: " +
-                                        "${record.value} " +
+                                        "${record.formattedValue()} " +
                                         record.type.unit
                                 )
 

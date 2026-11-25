@@ -38,6 +38,9 @@
     <uses-feature
             android:name="android.hardware.sensor.stepcounter"
             android:required="false" />
+    <uses-feature
+            android:name="android.hardware.sensor.accelerometer"
+            android:required="false" />
     <application
         android:name=".VetCareApplication"
         android:allowBackup="true"

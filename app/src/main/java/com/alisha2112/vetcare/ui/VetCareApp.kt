@@ -63,6 +63,7 @@ import com.alisha2112.vetcare.ui.records.AddObservationUiState
 import com.alisha2112.vetcare.data.model.ObservationType
 import com.alisha2112.vetcare.data.model.VetObservation
 import com.alisha2112.vetcare.data.model.countByType
+import com.alisha2112.vetcare.data.model.formattedValue
 import com.alisha2112.vetcare.data.model.sleepQuality
 import com.alisha2112.vetcare.data.model.summary
 import com.alisha2112.vetcare.data.settings.ThemeMode
@@ -72,6 +73,8 @@ import com.alisha2112.vetcare.ui.records.RecordsViewModel
 import com.alisha2112.vetcare.ui.weather.WeatherUiState
 import com.alisha2112.vetcare.ui.weather.WeatherViewModel
 import com.alisha2112.vetcare.ui.ble.BleScreen
+import com.alisha2112.vetcare.ui.sensors.BubbleLevelScreen
+import com.alisha2112.vetcare.ui.sensors.StepCounterScreen
 import com.alisha2112.vetcare.ui.records.ObservationLocationPicker
 import com.alisha2112.vetcare.ui.map.ObservationsMapScreen
 import com.alisha2112.vetcare.ui.records.ObservationPhotoPreview
@@ -84,6 +87,8 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 @Serializable data object BleRoute
+@Serializable data object StepCounterRoute
+@Serializable data object BubbleLevelRoute
 @Serializable data object LoginRoute
 @Serializable data object HomeRoute
 @Serializable data object LocationPermissionRoute
@@ -196,6 +201,18 @@ fun VetCareApp(
                 )
             }
 
+            composable<StepCounterRoute> {
+                StepCounterScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
+            composable<BubbleLevelRoute> {
+                BubbleLevelScreen(
+                    onBack = { navController.popBackStack() }
+                )
+            }
+
             composable<LoginRoute> {
                 LoginContent { selectedRole ->
                     role = selectedRole
@@ -224,6 +241,12 @@ fun VetCareApp(
                     },
                     onOpenBle = {
                         navController.navigate(BleRoute)
+                    },
+                    onOpenStepCounter = {
+                        navController.navigate(StepCounterRoute)
+                    },
+                    onOpenBubbleLevel = {
+                        navController.navigate(BubbleLevelRoute)
                     }
                 )
             }
@@ -356,7 +379,7 @@ fun VetCareApp(
                     onShare = { record ->
                         scope.launch {
                             snackbar.showSnackbar(
-                                "${record.petName}: ${record.type.title} — ${record.value} ${record.type.unit}"
+                                "${record.petName}: ${record.type.title} — ${record.formattedValue()} ${record.type.unit}"
                             )
                         }
                     },
@@ -527,7 +550,9 @@ private fun HomeContent(
     onRefreshWeather: () -> Unit,
     onOpenRecords: () -> Unit,
     onOpenLocationPermissions: () -> Unit,
-    onOpenBle: () -> Unit
+    onOpenBle: () -> Unit,
+    onOpenStepCounter: () -> Unit,
+    onOpenBubbleLevel: () -> Unit
 ) {
     var registrations by rememberSaveable {
         mutableIntStateOf(0)
@@ -604,6 +629,14 @@ private fun HomeContent(
 
                 Button(onClick = onOpenBle) {
                     Text("Bluetooth LE")
+                }
+
+                Button(onClick = onOpenStepCounter) {
+                    Text("Крокомір")
+                }
+
+                Button(onClick = onOpenBubbleLevel) {
+                    Text("Бульбашковий рівень")
                 }
             }
         }
@@ -888,7 +921,7 @@ private fun ObservationCard(
             )
 
             Text(
-                text = "${record.value} ${record.type.unit} · ${record.recordedAt}"
+                text = "${record.formattedValue()} ${record.type.unit} · ${record.recordedAt}"
             )
 
             if (record.note.isNotBlank()) {
@@ -1252,7 +1285,9 @@ private fun AddObservationDialog(
 
                     Text("Тип спостереження")
 
-                    ObservationType.entries.forEach {
+                    ObservationType.entries.filter {
+                        it.manualEntry
+                    }.forEach {
                             option ->
 
                         FilterChip(
@@ -1421,7 +1456,7 @@ private fun DetailsContent(
         } else {
             Text("Тварина: ${record.petName}")
             Text("Тип: ${record.type.title}")
-            Text("Значення: ${record.value} ${record.type.unit}")
+            Text("Значення: ${record.formattedValue()} ${record.type.unit}")
             Text("Дата: ${record.recordedAt}")
             Text("Примітка: ${record.note.ifBlank { "Не вказано" }}")
 
@@ -1595,6 +1630,8 @@ private fun StatisticsContent(
             "Остання тривалість сну: " +
                     "${summary.latestSleepHours ?: "—"} год"
         )
+
+        Text("Кроки за записами крокоміра: ${summary.totalSteps}")
 
         Text(
             text = "Дані різних тварин об’єднані лише для демонстрації операцій Kotlin; " +

@@ -1,3 +1,4 @@
+
 package com.alisha2112.vetcare.data.local
 
 import androidx.room.ColumnInfo
@@ -19,5 +20,12 @@ data class ObservationEntity(
     val note: String,
 
     @ColumnInfo(name = "recorded_at")
-    val recordedAt: String
+    val recordedAt: String,
+
+    val latitude: Double? = null,
+
+    val longitude: Double? = null,
+
+    @ColumnInfo(name = "photo_path")
+    val photoPath: String? = null
 )

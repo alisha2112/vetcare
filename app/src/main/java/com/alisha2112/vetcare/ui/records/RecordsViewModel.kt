@@ -20,13 +20,27 @@ import com.alisha2112.vetcare.data.export.ObservationCsvExporter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 
+data class AddObservationUiState(
+    val isSaving: Boolean = false,
+    val saved: Boolean = false,
+    val error: String? = null
+)
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class RecordsViewModel @Inject constructor(
     private val repository: ObservationRepository,
     private val csvExporter: ObservationCsvExporter
 ) : ViewModel() {
+    private val _addState =
+        MutableStateFlow(AddObservationUiState())
 
+    val addState = _addState.asStateFlow()
+
+    fun clearAddResult() {
+        if (!_addState.value.isSaving) {
+            _addState.value = AddObservationUiState()
+        }
+    }
     private val _selectedType =
         MutableStateFlow<ObservationType?>(null)
 
@@ -79,21 +93,73 @@ class RecordsViewModel @Inject constructor(
         petName: String,
         type: ObservationType,
         value: Double,
-        note: String
+        note: String,
+        latitude: Double? = null,
+        longitude: Double? = null,
+        photoPath: String? = null
     ) {
+        if (
+            _addState.value.isSaving ||
+            _addState.value.saved
+        ) return
+
         if (
             petName.isBlank() ||
             !value.isFinite() ||
             value <= 0
-        ) return
+        ) {
+            _addState.value = AddObservationUiState(
+                error = "Перевірте введені дані"
+            )
+            return
+        }
+
+        val validCoordinates =
+            (latitude == null && longitude == null) ||
+                    (
+                            latitude != null &&
+                                    longitude != null &&
+                                    latitude in -90.0..90.0 &&
+                                    longitude in -180.0..180.0
+                            )
+
+        if (!validCoordinates) {
+            _addState.value = AddObservationUiState(
+                error = "Некоректні GPS-координати"
+            )
+            return
+        }
+
+        _addState.value = AddObservationUiState(
+            isSaving = true
+        )
 
         viewModelScope.launch {
-            repository.addRecord(
-                petName,
-                type,
-                value,
-                note
-            )
+            try {
+                repository.addRecord(
+                    petName = petName,
+                    type = type,
+                    value = value,
+                    note = note,
+                    latitude = latitude,
+                    longitude = longitude,
+                    photoPath = photoPath
+                )
+
+                _addState.value = AddObservationUiState(
+                    saved = true
+                )
+
+            } catch (exception: CancellationException) {
+                _addState.value = AddObservationUiState()
+                throw exception
+
+            } catch (exception: Exception) {
+                _addState.value = AddObservationUiState(
+                    error = "Не вдалося зберегти спостереження. " +
+                            "Спробуйте ще раз."
+                )
+            }
         }
     }
 

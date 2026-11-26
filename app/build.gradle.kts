@@ -40,9 +40,21 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // JSON-схеми Room доступні MigrationTestHelper в інструментальних тестах.
+    sourceSets {
+        getByName("androidTest") {
+            assets.srcDir("$projectDir/schemas")
+        }
+    }
 }
 
 dependencies {
+    // Coil — відображення фотографій
+    implementation(libs.coil.compose)
+
+    // MapLibre Native — інтерактивні карти
+    implementation(libs.maplibre.android)
 
     // Jetpack Compose та Material 3
     implementation(platform(libs.androidx.compose.bom))
@@ -108,4 +120,3 @@ dependencies {
 ksp {
     arg("room.schemaLocation", "$projectDir/schemas")
 }
-

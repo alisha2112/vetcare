@@ -1,12 +1,23 @@
 
 package com.alisha2112.vetcare.data.model
 
-enum class ObservationType(val title: String, val unit: String) {
+/**
+ * [manualEntry] = false означає, що значення типу
+ * надходить лише від апаратного джерела (наприклад, крокоміра),
+ * тому тип не пропонується у формі ручного додавання.
+ */
+enum class ObservationType(
+    val title: String,
+    val unit: String,
+    val manualEntry: Boolean = true
+) {
     TEMPERATURE("Температура", "°C"),
     PULSE("Пульс", "уд/хв"),
     SLEEP("Сон", "год"),
-    FEEDING("Годування", "г")
+    FEEDING("Годування", "г"),
+    STEPS("Кроки", "кроків", manualEntry = false)
 }
+
 
 data class VetObservation(
     val id: Long,
@@ -14,8 +25,17 @@ data class VetObservation(
     val type: ObservationType,
     val value: Double,
     val note: String,
-    val recordedAt: String
+    val recordedAt: String,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val photoPath: String? = null
 )
+
+/** Значення для відображення: кроки показуються цілим числом. */
+fun VetObservation.formattedValue(): String = when (type) {
+    ObservationType.STEPS -> value.toLong().toString()
+    else -> value.toString()
+}
 
 /**
  * Навчальна класифікація тривалості сну.
@@ -32,7 +52,8 @@ data class DaySummary(
     val totalFeedGrams: Double,
     val averagePulse: Double?,
     val latestSleepHours: Double?,
-    val observationCount: Int
+    val observationCount: Int,
+    val totalSteps: Long = 0L
 )
 
 fun List<VetObservation>.summary(): DaySummary {
@@ -54,7 +75,12 @@ fun List<VetObservation>.summary(): DaySummary {
         latestSleepHours = firstOrNull {
             it.type == ObservationType.SLEEP
         }?.value,
-        observationCount = size
+        observationCount = size,
+        totalSteps = filter {
+            it.type == ObservationType.STEPS
+        }.sumOf {
+            it.value.toLong()
+        }
     )
 }
 

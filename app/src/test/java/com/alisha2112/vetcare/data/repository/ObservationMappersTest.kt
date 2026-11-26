@@ -51,4 +51,44 @@ class ObservationMappersTest {
 
         assertEquals(original, restored)
     }
+
+    @Test
+    fun coordinatesPhotoAndStepsSurviveRoundTrip() {
+        val original = ObservationEntity(
+            id = 11L,
+            petName = "Рекс",
+            type = "STEPS",
+            value = 4321.0,
+            note = "Крокомір",
+            recordedAt = "25.11.2026",
+            latitude = 50.4501,
+            longitude = 30.5234,
+            photoPath = "observation_photos/11111111-2222-3333-4444-555555555555.jpg"
+        )
+
+        val model = original.toModel()
+
+        assertEquals(ObservationType.STEPS, model.type)
+        assertEquals(50.4501, model.latitude!!, 0.0)
+        assertEquals(30.5234, model.longitude!!, 0.0)
+        assertEquals(original.photoPath, model.photoPath)
+        assertEquals(original, model.toEntity())
+    }
+
+    @Test
+    fun missingOptionalFieldsStayNull() {
+        val model = ObservationEntity(
+            id = 12L,
+            petName = "Луна",
+            type = "SLEEP",
+            value = 8.0,
+            note = "",
+            recordedAt = "25.11.2026",
+            latitude = 50.0
+        ).toModel()
+
+        assertEquals(50.0, model.latitude!!, 0.0)
+        assertEquals(null, model.longitude)
+        assertEquals(null, model.photoPath)
+    }
 }

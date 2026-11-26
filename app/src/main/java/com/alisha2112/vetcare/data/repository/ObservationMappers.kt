@@ -11,7 +11,10 @@ fun ObservationEntity.toModel(): VetObservation =
         type = ObservationType.valueOf(type),
         value = value,
         note = note,
-        recordedAt = recordedAt
+        recordedAt = recordedAt,
+        latitude = latitude,
+        longitude = longitude,
+        photoPath = photoPath
     )
 
 fun VetObservation.toEntity(): ObservationEntity =
@@ -21,5 +24,8 @@ fun VetObservation.toEntity(): ObservationEntity =
         type = type.name,
         value = value,
         note = note,
-        recordedAt = recordedAt
+        recordedAt = recordedAt,
+        latitude = latitude,
+        longitude = longitude,
+        photoPath = photoPath
     )

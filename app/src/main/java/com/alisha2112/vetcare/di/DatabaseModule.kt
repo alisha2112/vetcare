@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.alisha2112.vetcare.data.local.DatabaseMigrations
 import com.alisha2112.vetcare.data.local.ObservationDao
 import com.alisha2112.vetcare.data.local.VetCareDatabase
 import com.alisha2112.vetcare.data.model.ObservationType
@@ -28,6 +29,10 @@ object DatabaseModule {
             VetCareDatabase::class.java,
             "vetcare.db"
         )
+            .addMigrations(
+                DatabaseMigrations.MIGRATION_1_2,
+                DatabaseMigrations.MIGRATION_2_3
+            )
             .addCallback(SeedObservationsCallback())
             .build()
 

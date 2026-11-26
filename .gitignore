@@ -15,3 +15,5 @@
 local.properties
 # Android Studio local settings
 /.idea/
+# Google Maps API key (local only)
+/secrets.properties

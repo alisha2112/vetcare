@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [ObservationEntity::class],
-    version = 1,
+    version = 3,
     exportSchema = true
 )
 abstract class VetCareDatabase : RoomDatabase() {

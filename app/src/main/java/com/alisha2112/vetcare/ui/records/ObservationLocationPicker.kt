@@ -68,11 +68,20 @@ fun ObservationLocationPicker(
         onLoadingChanged(false)
     }
 
+    // Після надання дозволу з цієї кнопки координати
+    // отримуються без повторного натискання.
+    var attachAfterGrant by remember {
+        mutableStateOf(false)
+    }
+
     fun attachLocation() {
         if (!permissionsState.granted) {
+            attachAfterGrant = true
             permissionsState.request()
             return
         }
+
+        attachAfterGrant = false
 
         cancelRequest()
 
@@ -110,6 +119,8 @@ fun ObservationLocationPicker(
         if (!permissionsState.granted) {
             cancelRequest()
             onLocationChanged(null, null)
+        } else if (attachAfterGrant) {
+            attachLocation()
         }
     }
 

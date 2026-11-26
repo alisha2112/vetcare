@@ -1,5 +1,7 @@
 package com.alisha2112.vetcare.ui.map
 
+import com.alisha2112.vetcare.location.routeLengthMeters
+import com.alisha2112.vetcare.location.toRoutePoints
 import android.location.Location
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -105,26 +107,7 @@ fun ObservationsMapScreen(
 
     // Обчислення загальної довжини лінії маршруту.
     val routeDistanceMeters = remember(routePoints) {
-        var totalDistance = 0.0
-
-        val result = FloatArray(1)
-
-        for (index in 1 until routePoints.size) {
-            val previous = routePoints[index - 1]
-            val current = routePoints[index]
-
-            Location.distanceBetween(
-                previous.latitude,
-                previous.longitude,
-                current.latitude,
-                current.longitude,
-                result
-            )
-
-            totalDistance += result[0].toDouble()
-        }
-
-        totalDistance
+        routeLengthMeters(routePoints.toRoutePoints())
     }
 
     Column(

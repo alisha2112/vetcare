@@ -1,5 +1,7 @@
 package com.alisha2112.vetcare.ui.permissions
 
+import com.alisha2112.vetcare.location.routeLengthMeters
+import com.alisha2112.vetcare.location.toRoutePoints
 import android.Manifest
 import android.location.Location
 import android.os.CancellationSignal
@@ -226,26 +228,7 @@ fun LocationPermissionScreen(
 
     // Сумарна довжина пройденого маршруту.
     val routeDistanceMeters = remember(routePoints) {
-        var totalDistance = 0.0
-
-        for (index in 1 until routePoints.size) {
-            val previous = routePoints[index - 1]
-            val current = routePoints[index]
-
-            val results = FloatArray(1)
-
-            Location.distanceBetween(
-                previous.latitude,
-                previous.longitude,
-                current.latitude,
-                current.longitude,
-                results
-            )
-
-            totalDistance += results[0].toDouble()
-        }
-
-        totalDistance
+        routeLengthMeters(routePoints.toRoutePoints())
     }
 
     val formattedDate = remember(today) {

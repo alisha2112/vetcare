@@ -40,6 +40,13 @@ android {
     buildFeatures {
         compose = true
     }
+
+    // JSON-схеми Room доступні MigrationTestHelper в інструментальних тестах.
+    sourceSets {
+        getByName("androidTest") {
+            assets.srcDir("$projectDir/schemas")
+        }
+    }
 }
 
 dependencies {

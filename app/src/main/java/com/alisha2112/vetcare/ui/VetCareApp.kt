@@ -386,9 +386,21 @@ fun VetCareApp(
                     onDelete = {
                         viewModel.deleteRecord(id) { deleted ->
                             if (deleted != null) {
-                                navController.popBackStack()
+                                // Закриваємо деталі лише якщо користувач
+                                // ще перебуває на екрані цього запису.
+                                val current = navController.currentBackStackEntry
+                                if (
+                                    current?.destination?.hasRoute<DetailsRoute>() == true &&
+                                    current.toRoute<DetailsRoute>().recordId == id
+                                ) {
+                                    navController.popBackStack()
+                                }
 
                                 scope.launch {
+                                    // Інакше Snackbar «Запис видалено» стає в чергу
+                                    // за поточним і дія «Скасувати» з'являється із запізненням.
+                                    snackbar.currentSnackbarData?.dismiss()
+
                                     val result = snackbar.showSnackbar(
                                         message = "Запис видалено",
                                         actionLabel = "Скасувати",
